@@ -1,6 +1,6 @@
 ---
 name: bigstitcher-tune-alignment
-description: Find good registration (alignment) parameters for BigStitcher / BigStitcher-Spark multi-view or tiled light-sheet datasets. Covers interest-point detection (DoG sigma, threshold, downsampling), pairwise matching (descriptor and RANSAC settings) and global solver settings, judged by correspondence counts and registration error. Use this whenever a user asks why an alignment looks wrong, which detection or matching parameters to use, wants a parameter sweep, or wants a checklist for registering a new dataset with detect-interestpoints / match-interestpoints / solver, even if they never say "tune".
+description: Find good registration (alignment) parameters for BigStitcher / BigStitcher-Spark / multiview-reconstruction multi-view or tiled light-sheet datasets. Covers interest-point detection (DoG sigma, threshold, downsampling), pairwise matching (descriptor and RANSAC settings) and global solver settings, judged by correspondence counts and registration error. Use this whenever a user asks why an alignment looks wrong, which detection or matching parameters to use, wants a parameter sweep, or wants a checklist for registering a new dataset with detect-interestpoints / match-interestpoints / solver, even if they never say "tune".
 ---
 
 # BigStitcher: tune alignment parameters
