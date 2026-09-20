@@ -1,67 +1,71 @@
 ---
 name: bigstitcher-xml
-description: Filter or modify BigStitcher / BigDataViewer SpimData XML datasets (dataset.xml) with a bundled stdlib-only Python script. Keep only selected channels, tiles, angles, illuminations, timepoints or view-setup IDs and write a new, internally consistent XML (view setups, attributes, registrations, interest points, PSFs, stitching results and intensity adjustments are all pruned together). Use this whenever the user wants to subset, split, drop or clean up views in a BigStitcher, BigStitcher-Spark or multiview-reconstruction XML, even if they only say "remove these tiles", "just channel 0", "make a small test dataset" or "the XML still lists views I deleted".
+description: Edit BigStitcher / BigDataViewer SpimData XML projects (dataset.xml) without breaking them. Filter to selected channels, tiles, angles, illuminations, timepoints or views; clear, repair, add or remove interest-point labels and correspondences; strip registrations from views. Routes between a bundled stdlib-only Python script and the BigStitcher-Spark commands filter-views, clear-interestpoints and clear-registrations, and knows how to locate or install BigStitcher-Spark. Use whenever a user wants to subset, split or clean up a BigStitcher, BigStitcher-Spark or multiview-reconstruction project, even if they only say "remove these tiles", "just channel 0", "delete the beads label", "undo the last registration" or "the XML still lists views I deleted".
 ---
 
-# BigStitcher XML: filter views
+# BigStitcher XML: filter views, clear interest points, strip registrations
 
-A BigStitcher / SpimData2 `dataset.xml` describes every view and everything derived from those views.
-A view is one view setup at one timepoint; a view setup is one combination of channel, tile, angle and
-illumination. Registrations, interest points, PSFs, pairwise stitching results and intensity adjustments
-all reference views by ID. Deleting a `<ViewSetup>` by hand leaves dangling references in those sections
-and BigStitcher will refuse to load the file or behave oddly. The bundled script prunes all sections
-together so the output stays loadable.
+A BigStitcher / SpimData2 `dataset.xml` describes every view and everything derived from views. A view is
+one view setup at one timepoint; a view setup is one channel, tile, angle and illumination combination.
+Registrations, interest points, PSFs, pairwise stitching results and intensity adjustments all reference
+views by ID. Interest points themselves live outside the XML, in `interestpoints.n5` next to it. Editing
+the XML by hand leaves dangling references and BigStitcher refuses to load the file. The tools below keep
+every section consistent.
 
-## Script
+## Which tool
 
-`scripts/filter_bigstitcher_xml.py` is Python 3, standard library only, nothing to install.
+| Task | Tool | Notes |
+|---|---|---|
+| Keep only some channels / tiles / angles / illuminations / timepoints / views; XML is a local file | `scripts/filter_bigstitcher_xml.py` | no install, never touches image data |
+| Same, but the XML is on S3 / GCS, or in-place editing with a backup is wanted | `filter-views` (BigStitcher-Spark) | needs the image container reachable; `references/filter-views.md` |
+| Remove or add an interest-point label, drop correspondences, wipe all interest points, repair after views were deleted | `clear-interestpoints` | `references/clear-interestpoints.md` |
+| Remove the last N registrations, e.g. undo an affine solve | `clear-registrations` | `references/clear-registrations.md` |
+
+Anything else, such as renaming attributes or fixing image paths, is not covered. Do it carefully with
+the dangling-reference problem in mind, or extend this skill.
+
+## Filtering with the Python script
 
 ```bash
-python3 <this skill dir>/scripts/filter_bigstitcher_xml.py -i dataset.xml -o dataset_subset.xml [filters]
+python3 <skill dir>/scripts/filter_bigstitcher_xml.py -i dataset.xml -o dataset_subset.xml [filters] [--dry-run]
 ```
 
-Filters (at least one required; the view-setup filters are combined with AND):
+Filters: `--channels`, `--tiles`, `--angles`, `--illuminations`, `--views` (view-setup IDs) are combined
+with AND; `--timepoints` is an independent dimension. Values are space-separated IDs or inclusive ranges
+`a-b`. IDs are the `<id>` values in the XML, not names. `--help` prints all examples.
 
-| Flag | Selects by | Example |
-|---|---|---|
-| `--channels` | channel ID | `--channels 0 2` |
-| `--tiles` | tile ID | `--tiles 0-10 15` |
-| `--angles` | angle ID | `--angles 0` |
-| `--illuminations` | illumination ID | `--illuminations 0` |
-| `--views` | view setup ID directly | `--views 0-99 200` |
-| `--timepoints` | timepoint ID, applied independently | `--timepoints 0-5` |
+1. Map names to IDs first. Users say "the 488 channel" or "the second angle". Read the
+   `<Attributes name="channel">`, `tile`, `angle`, `illumination` blocks and `<ViewSetups>`, and confirm
+   the mapping with the user when it is not obvious.
+2. Write to a new file unless the user explicitly asks for in-place. Use `--dry-run` to show what survives.
+3. When the output goes to another directory, the script re-points `<BasePath>` at the original directory,
+   so image data and `interestpoints.n5` still resolve. It prints a note when it does this; `--no-rebase`
+   disables it for users who will copy the data next to the new XML.
+4. Report the kept view setups and timepoints afterwards. Interest-point data of dropped views stays on
+   disk; `clear-interestpoints --clearMode FIX_INTERESTPOINTS` removes it (needs BigStitcher-Spark).
 
-Values are space-separated lists. Each value is a single ID or an inclusive range `a-b`. IDs are the
-`<id>` elements in the XML, not names. The script exits with an error if the selection is empty.
-Run it with `--help` for the full usage text and more examples.
+## Using the BigStitcher-Spark commands
 
-## How to work
+Locate an installation first. Never clone or build without asking.
 
-1. Map names to IDs first. Users say "the 488 channel" or "the second angle"; the script needs IDs.
-   Read the `<Attributes name="channel">`, `tile`, `angle`, `illumination` blocks and `<ViewSetups>`
-   before filtering, and confirm the mapping with the user if it is not obvious.
-2. Write to a new file unless the user explicitly asks for in-place. Filtering is destructive to the
-   view set and keeping the original is cheap.
-3. Image data and interest-point directories on disk are not touched. Tell the user that orphaned
-   interest points stay on disk and can be removed afterwards with BigStitcher-Spark's
-   `clear-interestpoints --clearMode FIX_INTERESTPOINTS`.
-4. After filtering, sanity-check the result: count `<ViewSetup>` elements and timepoints in the
-   output and report them together with what was dropped.
+```bash
+bash <skill dir>/scripts/find_bigstitcher_spark.sh    # prints the directory holding the command shims
+```
 
-## When to use BigStitcher-Spark's `filter-views` instead
+- Found: run the shims from that directory or put it on `PATH`. Run each command with `--help` before
+  proposing flags. The CLI evolves; the flags in the reference files are current as of September 2026.
+- Not found: read `references/install-bigstitcher-spark.md`, tell the user what a build involves (clone,
+  Java 21, Maven, several minutes, a large dependency download) and proceed only with their agreement. For
+  filtering, fall back to the Python script instead of blocking on a build.
 
-BigStitcher-Spark ships a Java port of this script as the `filter-views` command. Prefer it when:
+Safety rules for the Java tools:
 
-- the XML lives on S3 or another URI the Python script cannot open (`-x s3://bucket/dataset.xml`);
-- the user wants in-place editing: `filter-views` overwrites the input by default and keeps a `~1`
-  backup, `-xo` sets an explicit output path;
-- the BigStitcher-Spark shims are already installed in the environment.
+- All three edit the XML in place. `filter-views` keeps a `~1` backup; the `clear-*` commands keep none.
+  Run with `--dryRun` first, show the user the output, then run for real.
+- `clear-interestpoints` also deletes data inside `interestpoints.n5`. There is no undo.
+- View selection: `--tileId 0,3`, `--channelId 0`, `--angleId`, `--illuminationId`, `--timepointId`, or
+  explicit `-vi '0,0' -vi '0,1'`. Comma-separated, unlike the Python script. No flags means every view.
+- Keep outputs next to the input. Relocating an XML with the Java tools orphans `interestpoints.n5`.
 
-Syntax differs. `filter-views` takes comma-separated values (`--tiles 0-10,15`); the Python script takes
-space-separated ones (`--tiles 0-10 15`). Range syntax `a-b` works in both.
-
-## Scope
-
-Only view filtering is implemented so far. Other XML edits (fixing image paths, dropping registrations
-or interest-point labels, renaming attributes) are not yet covered. For those, edit carefully by hand
-with the dangling-reference problem above in mind, or extend this skill with a new script.
+Reference files: `references/filter-views.md`, `references/clear-interestpoints.md`,
+`references/clear-registrations.md`, `references/install-bigstitcher-spark.md`.

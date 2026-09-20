@@ -12,7 +12,7 @@ drive the installed CLI tools; they do not need the Java source trees.
 
 | Skill | What it does |
 |---|---|
-| `skills/bigstitcher-xml` | Filter a SpimData XML down to selected channels / tiles / angles / illuminations / timepoints / views while keeping all dependent sections consistent. Bundles `filter_bigstitcher_xml.py`. |
+| `skills/bigstitcher-xml` | Edit SpimData XML projects safely: filter to selected channels / tiles / angles / illuminations / timepoints / views (bundled `filter_bigstitcher_xml.py`), clear or repair interest points and strip registrations via BigStitcher-Spark's `filter-views`, `clear-interestpoints`, `clear-registrations`. Locates an existing BigStitcher-Spark install (`BIGSTITCHER_SPARK_HOME`) and documents how to build one. |
 | `skills/bigstitcher-tune-alignment` | Workflow for finding good interest-point detection, matching and solver parameters. Skeleton for now. |
 
 All skills are prefixed `bigstitcher-` so they stay unambiguous when installed as bare user skills.
