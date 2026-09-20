@@ -25,11 +25,21 @@ Usage examples:
 
   # Filter by illumination and angle
   python filter_bigstitcher_xml.py -i dataset.xml -o out.xml --illuminations 0 --angles 0
+
+  # Preview what survives without writing anything
+  python filter_bigstitcher_xml.py -i dataset.xml -o out.xml --tiles 0-3 --dry-run
+
+Notes:
+  Every relative reference in the XML (image data, interestpoints.n5, PSFs) is resolved against
+  <BasePath>, which is itself relative to the XML's directory. When the output is written to a
+  different directory, <BasePath> is re-pointed at the original base directory so the subset keeps
+  working (disable with --no-rebase, e.g. when you will copy the data next to the new XML).
 """
 
 import argparse
 import xml.etree.ElementTree as ET
 import sys
+import os
 
 
 def parse_id_spec(specs):
@@ -140,7 +150,39 @@ def update_timepoints_element(seq_desc, keep_timepoint_ids):
             tp_elem.remove(tp_child)
 
 
-def filter_xml(input_path, output_path, keep_setup_ids, keep_timepoint_ids):
+def rebase_basepath(root, input_path, output_path):
+    """Re-point <BasePath> at the original base directory if the output lives elsewhere.
+
+    Returns the new BasePath text, or None if nothing had to change.
+    """
+    in_dir = os.path.dirname(os.path.abspath(input_path))
+    out_dir = os.path.dirname(os.path.abspath(output_path))
+    if os.path.normcase(in_dir) == os.path.normcase(out_dir):
+        return None
+
+    bp = root.find('BasePath')
+    if bp is None:
+        bp = ET.Element('BasePath')
+        bp.set('type', 'relative')
+        bp.text = '.'
+        root.insert(0, bp)
+
+    if bp.get('type') != 'relative':
+        return None  # absolute path or URI: still valid from anywhere
+
+    orig_base = os.path.normpath(os.path.join(in_dir, (bp.text or '.').strip()))
+    try:
+        rel = os.path.relpath(orig_base, out_dir).replace(os.sep, '/')
+        # trailing slash: the loaders resolve BasePath as a directory URI
+        bp.text = rel if rel.endswith('/') else rel + '/'
+    except ValueError:
+        # e.g. different drives on Windows: no relative path exists
+        bp.set('type', 'absolute')
+        bp.text = orig_base
+    return bp.text
+
+
+def filter_xml(input_path, output_path, keep_setup_ids, keep_timepoint_ids, rebase=True, dry_run=False):
     """Filter a BigStitcher XML keeping only the specified view setup IDs and timepoints."""
     tree = ET.parse(input_path)
     root = tree.getroot()
@@ -262,6 +304,16 @@ def filter_xml(input_path, output_path, keep_setup_ids, keep_timepoint_ids):
         for ia in to_remove:
             intensity.remove(ia)
 
+    # --- BasePath ---
+    if rebase:
+        new_base = rebase_basepath(root, input_path, output_path)
+        if new_base is not None:
+            print(f"Output directory differs from input: <BasePath> set to '{new_base}' so image data and "
+                  f"interestpoints.n5 still resolve (use --no-rebase to keep it unchanged)")
+
+    if dry_run:
+        return len(kept_setup_elems)
+
     # Write output
     ET.indent(tree, space='  ')
     tree.write(output_path, encoding='UTF-8', xml_declaration=True)
@@ -291,6 +343,11 @@ def main():
                         help='Timepoint IDs to keep (e.g. --timepoints 0-5)')
     parser.add_argument('--views', type=str, nargs='+', metavar='ID',
                         help='View setup IDs to keep directly (e.g. --views 0 1 5 or --views 0-99)')
+    parser.add_argument('--dry-run', action='store_true',
+                        help='Report what would be kept, but do not write the output file')
+    parser.add_argument('--no-rebase', action='store_true',
+                        help='Do not rewrite <BasePath> when the output is in a different directory '
+                             '(default: rebase so the subset still finds its image data and interest points)')
 
     args = parser.parse_args()
 
@@ -345,8 +402,12 @@ def main():
         print("Error: no matching view setups found. Nothing to write.", file=sys.stderr)
         sys.exit(1)
 
-    n_kept = filter_xml(args.input, args.output, keep_ids, keep_timepoint_ids)
-    print(f"Wrote {args.output} with {n_kept} view setups")
+    n_kept = filter_xml(args.input, args.output, keep_ids, keep_timepoint_ids,
+                        rebase=not args.no_rebase, dry_run=args.dry_run)
+    if args.dry_run:
+        print(f"Dry run: would write {args.output} with {n_kept} view setups")
+    else:
+        print(f"Wrote {args.output} with {n_kept} view setups")
 
 
 if __name__ == '__main__':
