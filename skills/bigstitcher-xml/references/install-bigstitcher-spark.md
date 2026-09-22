@@ -1,46 +1,66 @@
 # Locating or installing BigStitcher-Spark
 
-## Locate
+## Locate first
 
-`scripts/find_bigstitcher_spark.sh` checks `$BIGSTITCHER_SPARK_HOME`, the `PATH`, and common clone
-locations (`~/workspace`, `~/git`, `~/src`, `~/code`, `~`, the current directory) for the generated command
-shims and prints the directory that holds them.
+`scripts/find_bigstitcher_spark.sh` checks `$BIGSTITCHER_SPARK_HOME`, the `PATH`, `$BIGSTITCHER_SPARK_JAR` and
+common locations (`~/bigstitcher-spark`, `~/.local/share/bigstitcher-spark`, `/opt/bigstitcher-spark`,
+`~/BigStitcher-Spark`, `~/workspace/…`, `~/git/…`, `~/src/…`, `~/code/…`, the current directory).
 
-| Exit code | Meaning |
-|---|---|
-| 0 | found; the directory is on stdout |
-| 2 | a clone exists but was never built (message on stderr says where) |
-| 1 | nothing found |
+| Exit | Meaning | stdout |
+|---|---|---|
+| 0 | command executables found (`filter-views`, `clear-interestpoints`, … and usually `bigstitcher-spark`) | the directory |
+| 3 | only a release jar found (`BigStitcher-Spark-<v>-local.jar`), no executables | the jar path; run `java -Xmx<G>g -jar <jar> <command> …`, or run `install-release` in that directory to get executables |
+| 2 | a source clone without executables | hint on stderr |
+| 1 | nothing found | hint on stderr |
 
-It also reports the Java version it sees, because the tools need Java 17 or 21.
+It also reports the Java version; the tools need Java 17 or 21.
 
-## Install (only with the user's agreement)
+## Install with `install-release` (recommended, no build)
 
-There is no downloadable package yet: no release jars, no conda package, no Docker image. The tools are
-built from source, which takes several minutes and downloads a large dependency tree on the first run.
-Say so before starting, and let the user decide.
-
-Prerequisites: **Java 21** (17 also works; Spark 4 dropped Java 8 and 11) and **Apache Maven**. Check
-with `java -version` and `mvn -v`. `JAVA_HOME` must point at the JDK. If the project README still mentions
-Java 8, that is outdated.
+Prerequisite: **Java 21** (17 works), check with `java -version`. Nothing else. Takes about a minute.
 
 ```bash
-git clone https://github.com/PreibischLab/BigStitcher-Spark.git
-cd BigStitcher-Spark
-./install -t <threads> -m <memory in GB>      # e.g. ./install -t 8 -m 32
-export BIGSTITCHER_SPARK_HOME="$PWD"          # optional; lets the finder script locate it later
+mkdir -p ~/bigstitcher-spark && cd ~/bigstitcher-spark
+curl -fsSLO https://raw.githubusercontent.com/JaneliaSciComp/BigStitcher-Spark/main/install-release
+bash install-release -t <threads> -m <memory in GB>      # e.g. -t 8 -m 32; -v 0.1.1 pins a release; -f re-downloads
+export BIGSTITCHER_SPARK_HOME="$PWD"                      # optional, lets the finder script locate it later
 ```
 
-`./install` runs `mvn clean install`, including the integration tests, and writes one shim per command into
-the repository directory: `filter-views`, `clear-interestpoints`, `clear-registrations`, `resave`,
-`detect-interestpoints`, `match-interestpoints`, `stitching`, `solver`, `create-fusion-container`, `fusion`,
-and more. Each shim starts a local Spark with the given thread count and memory. The shims embed absolute
-paths into `~/.m2`, so they only work on the machine that built them.
+It resolves the latest GitHub release, downloads `BigStitcher-Spark-<v>-local.jar` (about 340 MB, Spark bundled),
+verifies it, and writes one executable per command into the directory: `resave`, `detect-interestpoints`,
+`match-interestpoints`, `stitching`, `solver`, `match-intensities`, `solve-intensities`, `create-fusion-container`,
+`fusion`, `nonrigid-fusion`, `split-images`, `filter-views`, `downsample`, `clear-interestpoints`,
+`clear-registrations`, `transform-points`, `overlay-landmarks`, plus `bigstitcher-spark`, which exposes all of them
+as subcommands. Each executable runs `java -Xmx<mem>g -Dspark.master=local[<threads>] -jar <jar> <command>`;
+`JAVA_OPTS` adds JVM options. Running it again in the same directory updates to the latest release.
 
-After `git pull`, rerun `./install`, or `mvn install -DskipTests` to refresh just the jar the shims use.
+Before running it, tell the user that it downloads a few hundred MB and where the files will go, and get their OK.
+Never run it unasked.
+
+## Manual alternative
+
+Download `BigStitcher-Spark-<v>-local.jar` from https://github.com/JaneliaSciComp/BigStitcher-Spark/releases/latest
+(stable link: https://github.com/JaneliaSciComp/BigStitcher-Spark/releases/latest/download/BigStitcher-Spark-local.jar) and run
+
+```bash
+java -Xmx32g -jar BigStitcher-Spark-local.jar <command> [options]    # all cores; -Dspark.master='local[8]' to limit
+java -Xmx32g -jar BigStitcher-Spark-local.jar --help                 # lists the commands
+```
+
+## Versions
+
+View selection in `clear-interestpoints` and `clear-registrations` needs release **0.1.1 or later**; check with
+`bigstitcher-spark --version` or `java -jar <jar> --version`. Releases: https://github.com/JaneliaSciComp/BigStitcher-Spark/releases
+
+## Building from source (developers only)
+
+Java 21 and Apache Maven, then `git clone https://github.com/JaneliaSciComp/BigStitcher-Spark.git`,
+`cd BigStitcher-Spark`, `./install -t <threads> -m <GB>`. This runs `mvn clean install` including the tests
+(several minutes, large dependency download) and writes the same executables into the clone, embedding absolute
+`~/.m2` paths, so they only work on that machine. Only needed for unreleased changes.
 
 ## Clusters and cloud
 
-`mvn clean package -P fatjar` builds `target/BigStitcher-Spark-<version>.jar` for
-`spark-submit --class net.preibisch.bigstitcher.spark.<Class>`. Spark itself is not bundled. The XML tools
-covered by this skill are normally run locally through the shims, not via spark-submit.
+`BigStitcher-Spark-<v>-cluster.jar` from the same release page (Spark not bundled) is for
+`spark-submit --class net.preibisch.bigstitcher.spark.<Class> … cluster.jar …` or `spark-submit … cluster.jar <command> …`.
+The XML tools covered by this skill are normally run locally.

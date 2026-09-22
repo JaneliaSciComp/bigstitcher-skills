@@ -17,8 +17,8 @@ Exactly one of the two, N >= 0. "First" and "last" follow the order of applicati
 them: calibration, then metadata tile locations, then registration results.
 
 View selection as in `clear-interestpoints`: `--tileId`, `--channelId`, `--angleId`, `--illuminationId`,
-`--timepointId`, or `-vi '0,0'`. No flags means all views. Builds older than September 2026 accepted these
-flags but silently applied the change to every view.
+`--timepointId`, or `-vi '0,0'`. No flags means all views. Releases before 0.1.1 accepted these flags but
+silently applied the change to every view.
 
 ```bash
 clear-registrations -x dataset.xml --remove 1 --dryRun                # show what would go

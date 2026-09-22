@@ -24,7 +24,7 @@ At least one filter is required. Exits with a message when nothing matches.
 
 | | Python script | filter-views |
 |---|---|---|
-| Install | none (Python 3) | BigStitcher-Spark build, Java 21 |
+| Install | none (Python 3) | BigStitcher-Spark release via `install-release`, Java 21 |
 | Input location | local file | local, S3, GCS |
 | Image data must be reachable | never | yes for N5 and Zarr loaders (the container is opened while parsing the XML); HDF5 loads lazily |
 | Output default | `-o` required | overwrite input with `~1` backup |

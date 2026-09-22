@@ -52,11 +52,14 @@ Locate an installation first. Never clone or build without asking.
 bash <skill dir>/scripts/find_bigstitcher_spark.sh    # prints the directory holding the command shims
 ```
 
-- Found: run the shims from that directory or put it on `PATH`. Run each command with `--help` before
-  proposing flags. The CLI evolves; the flags in the reference files are current as of September 2026.
-- Not found: read `references/install-bigstitcher-spark.md`, tell the user what a build involves (clone,
-  Java 21, Maven, several minutes, a large dependency download) and proceed only with their agreement. For
-  filtering, fall back to the Python script instead of blocking on a build.
+- Exit 0: run the executables from the printed directory or put it on `PATH`. Run each command with `--help`
+  before proposing flags. The CLI evolves; the flags in the reference files match release 0.1.1 (September 2026).
+- Exit 3: a downloaded `BigStitcher-Spark-<v>-local.jar` but no executables. Run commands as
+  `java -Xmx<G>g -jar <jar> <command> …`, or offer to create the executables with `install-release`.
+- Exit 1 or 2: nothing installed. Read `references/install-bigstitcher-spark.md`. The normal path is
+  `install-release`: Java 21 is the only prerequisite, it downloads the latest release (about 340 MB) and
+  creates the executables in about a minute, no clone and no build. Tell the user what it downloads and where,
+  and proceed only with their agreement. For filtering, use the Python script instead of blocking on this.
 
 Safety rules for the Java tools:
 

@@ -1,8 +1,8 @@
 # bigstitcher-skills
 
-Claude Code skills for working with [BigStitcher](https://github.com/PreibischLab/BigStitcher),
-[BigStitcher-Spark](https://github.com/PreibischLab/BigStitcher-Spark) and
-[multiview-reconstruction](https://github.com/PreibischLab/multiview-reconstruction).
+Claude Code skills for working with [BigStitcher](https://github.com/JaneliaSciComp/BigStitcher),
+[BigStitcher-Spark](https://github.com/JaneliaSciComp/BigStitcher-Spark) and
+[multiview-reconstruction](https://github.com/JaneliaSciComp/multiview-reconstruction).
 
 A skill is a `SKILL.md` instruction file plus optional scripts and reference docs. Claude Code keeps
 every skill's name and description in context and loads the rest when a task matches. These skills
@@ -12,7 +12,7 @@ drive the installed CLI tools; they do not need the Java source trees.
 
 | Skill | What it does |
 |---|---|
-| `skills/bigstitcher-xml` | Edit SpimData XML projects safely: filter to selected channels / tiles / angles / illuminations / timepoints / views (bundled `filter_bigstitcher_xml.py`), clear or repair interest points and strip registrations via BigStitcher-Spark's `filter-views`, `clear-interestpoints`, `clear-registrations`. Locates an existing BigStitcher-Spark install (`BIGSTITCHER_SPARK_HOME`) and documents how to build one. |
+| `skills/bigstitcher-xml` | Edit SpimData XML projects safely: filter to selected channels / tiles / angles / illuminations / timepoints / views (bundled `filter_bigstitcher_xml.py`), clear or repair interest points and strip registrations via BigStitcher-Spark's `filter-views`, `clear-interestpoints`, `clear-registrations`. Locates an existing BigStitcher-Spark install (`BIGSTITCHER_SPARK_HOME`, `BIGSTITCHER_SPARK_JAR`) and documents `install-release`, which downloads the latest release instead of building. |
 | `skills/bigstitcher-tune-alignment` | Workflow for finding good interest-point detection, matching and solver parameters. Skeleton for now. |
 
 All skills are prefixed `bigstitcher-` so they stay unambiguous when installed as bare user skills.
@@ -36,7 +36,7 @@ The `skills/` layout is already the one Claude Code plugins use. To let others i
 
 1. Add `.claude-plugin/plugin.json` (name, version, description) and `.claude-plugin/marketplace.json`
    listing this plugin with source `./`.
-2. Users run `/plugin marketplace add PreibischLab/bigstitcher-skills` followed by `/plugin install`.
+2. Users run `/plugin marketplace add JaneliaSciComp/bigstitcher-skills` followed by `/plugin install`.
 
 Nothing is distributed until that metadata exists and someone explicitly adds the marketplace. Once
 installed, Claude Code pulls plugin updates at session start, so from that point on treat pushes to the

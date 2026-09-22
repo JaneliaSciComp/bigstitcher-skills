@@ -48,5 +48,5 @@ clear-interestpoints -x dataset.xml --clearMode CLEAR_ALL_CORRESPONDENCES --sile
 clear-interestpoints -x dataset.xml --clearMode FIX_INTERESTPOINTS
 ```
 
-View selection requires a BigStitcher-Spark build from September 2026 or later. Older builds always
-process the whole dataset and reject the selection flags as unknown options.
+View selection requires BigStitcher-Spark release 0.1.1 or later (`bigstitcher-spark --version`). Older
+versions always process the whole dataset and reject the selection flags as unknown options.
