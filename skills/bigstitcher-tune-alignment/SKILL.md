@@ -104,11 +104,23 @@ Read the result with `rank_runs.py table OUT/runs.jsonl` and judge it (step 4). 
 - rotation > 1 deg or scale / shear flags on a translation-close dataset -> too few or wrong links on that view;
   prefer the regularised models, check the view's pairs
 
-Persist the pick before the next level (the registration is written into the working copy's XML, the chosen
-label's pcmatch staging is committed at that save):
+Persist the pick before the next level (the registration is written into the working copy's XML; a pcmatch label's
+staged correspondences are committed at that save):
 ```bash
-bash SKILL_DIR/scripts/sweep.sh --save /scratch/run_tune/dataset.xml /scratch/run_tune_results/ds2-1 ss_ds2-1_nf2.5__emb affine-tr
+bash SKILL_DIR/scripts/sweep.sh --save /scratch/run_tune/dataset.xml /scratch/run_tune_results/ds2-1 ss_ds2-1_nf2.5__emb rigid-tr
 ```
+
+**The whole ladder in one command** -- `ladder.sh` runs `sweep.sh` per level, picks the best UNFLAGGED run
+(`rank_runs.py best`: most inliers, tripwires clean; `PREFER_SOLVERS=tr,rigid-tr` to prefer simpler models),
+saves it and shrinks the search radius to max(20, 3 x the saved solve's max error):
+```bash
+bash SKILL_DIR/scripts/ladder.sh /scratch/run_tune/dataset.xml /scratch/run_tune_results "8,8 4,4 2,2"    # levels DSXY,DSZ coarse first
+```
+Read every level's `report_<level>.md` anyway: the selector cannot see what the numbers hide (step 4).
+
+**Confirm on the TEST block / apply to the whole dataset**: the same ladder with the grid pinned to the pick, e.g.
+`DETECTORS=ss FACTORS=2.5 MATCHERS=emb SOLVERS=rigid-tr bash SKILL_DIR/scripts/ladder.sh TEST.xml TEST_results "4,4 2,2"`;
+the TEST block should reach inliers, error and connectivity of the same order as the TUNE block.
 
 ## 4. Judge
 

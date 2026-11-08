@@ -61,7 +61,10 @@ if [ $MODE = save ]; then
   cp "$XML" "$OUT/solved_${LAB}_$S.xml"
   $PY "$PARSE" "$OUT/save_${LAB}_$S.log" | tee -a "$OUT/sweep.log"
   REP=$HERE/../../bigstitcher-judge-alignment/scripts/registration_report.py
-  [ -f "$REP" ] && $PY "$REP" "$XML" ${XML_ORIG:+--ref "$XML_ORIG"} $( [ -f "$XML.orig" ] && [ -z "${XML_ORIG:-}" ] && echo --ref "$XML.orig") | tee "$OUT/registration_after_${LAB}_$S.txt"
+  PYNP=$PY; $PYNP -c 'import numpy' 2>/dev/null || { [ -n "${PCMATCH:-}" ] && [ -x "$(dirname "$PCMATCH")/python" ] && PYNP=$(dirname "$PCMATCH")/python; }
+  if [ -f "$REP" ] && $PYNP -c 'import numpy' 2>/dev/null; then
+    $PYNP "$REP" "$XML" ${XML_ORIG:+--ref "$XML_ORIG"} $( [ -f "$XML.orig" ] && [ -z "${XML_ORIG:-}" ] && echo --ref "$XML.orig") | tee "$OUT/registration_after_${LAB}_$S.txt"
+  else log "registration_report.py skipped (needs a python with numpy: set PY=/path/python)"; fi
   log "SAVED: $LAB / $S written into $XML (copy: $OUT/solved_${LAB}_$S.xml)"
   exit 0
 fi
@@ -100,7 +103,7 @@ make_label() { # base factor matcher -> echoes the FILTERED label of this (facto
   fi
   echo "$tag"
 }
-match() { local lab=$1 m=$2
+match() { local lab=$1 m=$2 base=${3:-$1}
   if [ -s "$OUT/match_$lab.log" ] && grep -q -E 'Done|RANSAC: [0-9]+ correspondences' "$OUT/match_$lab.log"; then log "match $lab exists, skipped"; return 0; fi
   case $m in
     geo) run "match_$lab" "$BSS/match-interestpoints" -x "$XML" -l "$lab" $VIEWS -m PRECISE_TRANSLATION -tm TRANSLATION -rm NONE \
@@ -108,8 +111,8 @@ match() { local lab=$1 m=$2
     fastrot) run "match_$lab" "$BSS/match-interestpoints" -x "$XML" -l "$lab" $VIEWS -m FAST_ROTATION -tm TRANSLATION -rm NONE \
             -rme "$RME" -rmni "$RMNI" -rmir "$RMIR" --clearCorrespondences $SPARK;;
     emb) [ -n "${MODEL_ONNX:-}" ] || { log "matcher emb needs MODEL_ONNX"; return 1; }
-         if [ ! -f "$OUT/embed_$lab.done" ]; then
-           run "embed_$lab" "$BSS/embed-interestpoints" -x "$XML" -l "$lab" $VIEWS --model "$MODEL_ONNX" $SPARK && touch "$OUT/embed_$lab.done" || return 1
+         if [ ! -f "$OUT/embed_$base.done" ]; then      # one embedding per BASE label serves every filtered label of it
+           run "embed_$base" "$BSS/embed-interestpoints" -x "$XML" -l "$base" $VIEWS --model "$MODEL_ONNX" $SPARK && touch "$OUT/embed_$base.done" || return 1
          fi
          run "match_$lab" "$BSS/match-interestpoints" -x "$XML" -l "$lab" $VIEWS -m EMBEDDINGS -sr "$RADIUS" --descriptorRatio "$RATIO" --minSimilarity "$MINSIM" \
             -tm TRANSLATION -rm NONE -rme "$RME" -rmni "$RMNI" -rmir "$RMIR" --clearCorrespondences $SPARK;;
@@ -134,7 +137,7 @@ for d in $DETECTORS; do
     for m in $MATCHERS; do
       lab=$(make_label "$LABEL_BASE" "$f" "$m") || continue
       t0=$SECONDS
-      match "$lab" "$m" || continue
+      match "$lab" "$m" "$LABEL_BASE" || continue
       tm=$((SECONDS - t0))
       for s in $SOLVERS; do
         solve_dry "$lab" "$s" && record "$d" "$LABEL_BASE" "$f" "$lab" "$m" "$s" "$((tm + SECONDS - t0 - tm))"
