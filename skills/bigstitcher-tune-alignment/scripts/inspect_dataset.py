@@ -204,7 +204,8 @@ def main():
     ap.add_argument("xml")
     ap.add_argument("--setups", help="restrict to these view setup ids (e.g. 32-47)")
     ap.add_argument("--tp", type=int, help="restrict to this timepoint")
-    ap.add_argument("--intensity", action="store_true", help="sample intensity percentiles of two views per group (tensorstore)")
+    ap.add_argument("--intensity", action="store_true", help="sample intensity percentiles of the views (tensorstore): every view of a group up to --intensity-max, else that many spread over the group; flags EMPTY tiles")
+    ap.add_argument("--intensity-max", type=int, default=8, help="max views sampled per group (default 8)")
     ap.add_argument("--json", metavar="OUT")
     a = ap.parse_args()
 
@@ -328,9 +329,12 @@ def main():
                "anisotropy": (vox[2] / vox[0]) if vox else None, "pyramid": factors, "ladder": ladder(vox or (1, 1, 1), size, factors)}
         if a.intensity:
             samp = []
-            for k in ks[:: max(1, len(ks) // 2)][:2]:
+            picks = ks if len(ks) <= a.intensity_max else [ks[i * (len(ks) - 1) // (a.intensity_max - 1)] for i in range(a.intensity_max)]
+            for k in picks:
                 r = sample_intensity(il_fmt, img_base, None, zgroups.get(k, ""), k[1], k[0])
                 if r is not None:
+                    if "error" not in r:        # an empty tile: the bright tail sits at the background level
+                        r["empty"] = r["p99.9"] <= 3 * max(r["p50"], 1e-9) or r["max"] <= 3 * max(r["p50"], 1e-9)
                     samp.append({"view": f"{k[0]},{k[1]}", **r})
             row["intensity"] = samp
         group_rows.append(row)
@@ -366,7 +370,8 @@ def main():
                 print(f"      intensity view {s['view']}: {s['error']}")
             else:
                 print(f"      intensity view {s['view']} (coarsest level {s['level_shape']}): min {s['min']:g} p0.1 {s['p0.1']:g} p50 {s['p50']:g} "
-                      f"p99 {s['p99']:g} p99.9 {s['p99.9']:g} p99.99 {s['p99.99']:g} max {s['max']:g}; zeros {100 * s['zero_fraction']:.1f}%")
+                      f"p99 {s['p99']:g} p99.9 {s['p99.9']:g} p99.99 {s['p99.99']:g} max {s['max']:g}; zeros {100 * s['zero_fraction']:.1f}%"
+                      + ("   <-- EMPTY tile (no signal above background): exclude it, it cannot be registered" if s.get("empty") else ""))
     if a.intensity and not any(g.get("intensity") for g in group_rows):
         print("      (intensity sampling needs tensorstore + numpy and an N5 / OME-Zarr loader; read min/max off BigStitcher instead)")
     for st in result["stacks"]:

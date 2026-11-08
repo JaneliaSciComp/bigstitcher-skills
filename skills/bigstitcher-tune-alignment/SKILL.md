@@ -52,8 +52,9 @@ group and (with `--intensity`, needs tensorstore) percentiles of a coarse level 
 Decide with the user:
 - **Which views.** One channel is enough for tiles (the others get the same transforms later). For a large
   mosaic cut TWO disjoint small blocks (2x2 tiles) with `../bigstitcher-xml/scripts/filter_bigstitcher_xml.py`:
-  a TUNE block with real content (check the intensity percentiles -- an empty tile has p99.9 at background) and a
-  TEST block elsewhere. Tune on the first, confirm on the second, then run the pick on everything.
+  a TUNE block with real content and a TEST block elsewhere; `inspect_dataset.py --intensity` samples every view of
+  a small selection and marks EMPTY tiles (bright tail at background level) -- leave those out, nothing can register
+  them, and a block with one is judged on its other views (ds6-mouse-head's tiles 8 and 15 are such tiles). Tune on the first, confirm on the second, then run the pick on everything.
 - **Groups.** Two groups with different voxel sizes or intensity ranges = different objectives / cameras: each
   group gets its own `-i0 -i1` and its downsampling scaled by the voxel-size ratio, detected into the SAME label.
 - **Start registration.** Translation-close data: reset to calibration + metadata placement,
