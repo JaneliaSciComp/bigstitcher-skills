@@ -105,7 +105,12 @@ detect() { # detector -> LABEL_BASE NOISE_FLOOR
   read -r NOISE_FLOOR NPTS MINPTS SPREAD < <($PY "$PARSE" "$OUT/detect_$lab.log" --json - | $PY -c 'import json,sys; r=json.load(sys.stdin); t=r.get("threshold") or {}
 p=r.get("noise_floor_pooled") or {}; fl=t.get("noise_floor") or (p.get("median", 0) if "'"${FLOOR:-highest}"'" == "median" else p.get("max", 0))
 print(fl, r["totals"]["points"], r["totals"]["min"], (p.get("max", 0) / p["median"]) if p.get("median") else 0)')
-  log "detected $lab: $NPTS points (min per view $MINPTS), noise floor $NOISE_FLOOR = highest view (spread highest/median ${SPREAD}x), threshold $(awk "BEGIN{print $NF*$NOISE_FLOOR}")"
+  if [ "${FLOOR:-highest}" = median ]; then        # an explicit -t run prints no floors: take them from the probe log
+    [ -n "${MEDFLOOR:-}" ] || MEDFLOOR=$($PY "$PARSE" "$OUT/probe_$lab.log" --json - | $PY -c 'import json,sys; print((json.load(sys.stdin).get("noise_floor_pooled") or {}).get("median", 0))')
+    NOISE_FLOOR=$MEDFLOOR
+    SPREAD=$($PY "$PARSE" "$OUT/probe_$lab.log" --json - | $PY -c 'import json,sys; p=json.load(sys.stdin).get("noise_floor_pooled") or {}; print((p.get("max", 0) / p["median"]) if p.get("median") else 0)')
+  fi
+  log "detected $lab: $NPTS points (min per view $MINPTS), noise floor $NOISE_FLOOR = ${FLOOR:-highest} view (spread highest/median ${SPREAD}x), threshold $(awk "BEGIN{print $NF*$NOISE_FLOOR}")"
   awk "BEGIN{exit !($SPREAD > 3)}" && log "  NOTE: the per-view noise floors differ by ${SPREAD}x -- the highest view is probably structure, not noise; consider -t NF x the median floor, or a finer level"
   [ "$MINPTS" -lt 100 ] && log "  NOTE: a view has only $MINPTS points -- too coarse a level or too high a threshold; expect failed pairs"
   return 0
