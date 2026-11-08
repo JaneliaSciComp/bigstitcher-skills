@@ -15,8 +15,9 @@ It reports
     calibration and the metadata placement (large pure translations), drops registration results
   * existing interest-point labels with their detection parameters
   * the pairs of views whose registered bounding boxes overlap (what the matcher will try)
-  * a coarse-to-fine downsampling LADDER per group: dsXY in 8,4,2,1 while every view keeps >= 128 px per axis,
-    dsZ chosen so the detection grid is near-isotropic, with the RANSAC max error to start from at each level
+  * a coarse-to-fine downsampling LADDER per group: dsXY in 8,4,2,1 while every view keeps >= 200 px per axis,
+    dsZ chosen so the detection grid is near-isotropic, the stored pyramid level each choice reads (and a cheaper dsZ
+    that hits a stored level directly), with the RANSAC max error to start from at each level
 """
 import argparse
 import json
@@ -85,7 +86,10 @@ def bbox(M, size):
     return [min(p[i] for p in pts) for i in range(3)], [max(p[i] for p in pts) for i in range(3)]
 
 
-def ladder(vox, size, min_px=128, min_z=32):
+def ladder(vox, size, factors=None, min_px=200, min_z=32):
+    """Coarse-to-fine levels. dsz = the near-isotropic choice; when the image pyramid has no level with that z factor the
+    detection reads a finer stored level and downsamples in memory -- 'read_level' / 'read_gvox' show the cost per view and
+    'dsz_cheap' the z factor of the stored level that would be read directly (anisotropic grid, much cheaper on NFS)."""
     vx, vz = vox[0], vox[2]
     out = []
     for ds in (8, 4, 2, 1):
@@ -94,9 +98,56 @@ def ladder(vox, size, min_px=128, min_z=32):
         dsz = max(1, int(round(ds * vx / vz)))
         while dsz > 1 and size[2] / dsz < min_z:
             dsz //= 2
-        out.append({"dsxy": ds, "dsz": dsz, "grid_vox_xy": ds * vx, "grid_vox_z": dsz * vz,
-                    "rme_start": max(2.0, 2.5 * ds) if ds > 1 else 2.0})
+        row = {"dsxy": ds, "dsz": dsz, "grid_vox_xy": ds * vx, "grid_vox_z": dsz * vz, "rme_start": max(2.0, 2.5 * ds) if ds > 1 else 2.0}
+        if factors:
+            lvl = stored_level_for(factors, ds, dsz)
+            row["read_level"] = lvl
+            row["read_gvox"] = size[0] * size[1] * size[2] / (lvl[0] * lvl[1] * lvl[2]) / 1e9
+            stored_z = sorted({f[2] for f in factors if f[0] <= ds})
+            cheap = max((z for z in stored_z if z <= max(dsz, 1) * 4), default=dsz)
+            if cheap != dsz:
+                lvl2 = stored_level_for(factors, ds, cheap)
+                row["dsz_cheap"] = cheap
+                row["read_gvox_cheap"] = size[0] * size[1] * size[2] / (lvl2[0] * lvl2[1] * lvl2[2]) / 1e9
+        out.append(row)
     return out
+
+
+def pyramid_factors(il_fmt, img_base, zgroup, setup, tp):
+    """The stored downsampling factors [[fx, fy, fz], ...] of one view's image pyramid (BDV N5 or OME-Zarr), or None."""
+    try:
+        if il_fmt == "bdv.n5":
+            a = json.load(open(os.path.join(img_base, f"setup{setup}", "attributes.json")))
+            if "downsamplingFactors" in a:
+                return [list(map(int, f)) for f in a["downsamplingFactors"]]
+            cont = os.path.join(img_base, f"setup{setup}", f"timepoint{tp}")
+            out = []
+            for L in sorted(int(d[1:]) for d in os.listdir(cont) if d.startswith("s") and d[1:].isdigit()):
+                la = json.load(open(os.path.join(cont, f"s{L}", "attributes.json")))
+                out.append(list(map(int, la.get("downsamplingFactors", [2 ** L] * 3))))
+            return out or None
+        if il_fmt == "bdv.multimg.zarr":
+            cont = os.path.join(img_base, zgroup)
+            if os.path.exists(os.path.join(cont, "zarr.json")):
+                attrs = json.load(open(os.path.join(cont, "zarr.json")))["attributes"]
+                meta = attrs.get("ome", attrs)["multiscales"][0]
+            else:
+                meta = json.load(open(os.path.join(cont, ".zattrs")))["multiscales"][0]
+            scales = [next(t["scale"] for t in d["coordinateTransformations"] if t["type"] == "scale")[-3:] for d in meta["datasets"]]
+            s0 = scales[0]
+            return [[int(round(sc[2] / s0[2])), int(round(sc[1] / s0[1])), int(round(sc[0] / s0[0]))] for sc in scales]
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
+def stored_level_for(factors, dsxy, dsz):
+    """The stored level BigStitcher reads for a requested (dsxy, dsxy, dsz): the coarsest whose factors do not exceed the request."""
+    best = None
+    for f in factors or [[1, 1, 1]]:
+        if f[0] <= dsxy and f[1] <= dsxy and f[2] <= dsz and (best is None or f[0] * f[1] * f[2] > best[0] * best[1] * best[2]):
+            best = f
+    return best or [1, 1, 1]
 
 
 def sample_intensity(il_fmt, img_base, rel_path, zgroup, setup, tp, max_vox=40_000_000):
@@ -271,8 +322,10 @@ def main():
     # ladder + intensity per group
     group_rows = []
     for (vox, size), ks in groups.items():
+        k0 = ks[0]
+        factors = pyramid_factors(il_fmt, img_base, zgroups.get(k0, ""), k0[1], k0[0]) if img_base else None
         row = {"voxel": list(vox), "size": list(size), "n_views": len(ks), "setups": sorted({k[1] for k in ks}),
-               "anisotropy": (vox[2] / vox[0]) if vox else None, "ladder": ladder(vox or (1, 1, 1), size)}
+               "anisotropy": (vox[2] / vox[0]) if vox else None, "pyramid": factors, "ladder": ladder(vox or (1, 1, 1), size, factors)}
         if a.intensity:
             samp = []
             for k in ks[:: max(1, len(ks) // 2)][:2]:
@@ -299,8 +352,15 @@ def main():
     for g in group_rows:
         print(f"   group: {g['n_views']} views, size {g['size']}, voxel {g['voxel']} (anisotropy {g['anisotropy']:.2f}), setups "
               f"{g['setups'][:12]}{'...' if len(g['setups']) > 12 else ''}")
-        print("      ladder (coarse -> fine): " + "; ".join(f"dsxy {l['dsxy']} dsz {l['dsz']} (grid {l['grid_vox_xy']:.3g} x {l['grid_vox_z']:.3g} units, rme {l['rme_start']:g})"
-                                                            for l in g["ladder"]))
+        if g.get("pyramid"):
+            print(f"      image pyramid factors (x,y,z): {g['pyramid']}")
+        for l in g["ladder"]:
+            line = f"      level dsxy {l['dsxy']} dsz {l['dsz']}: grid {l['grid_vox_xy']:.3g} x {l['grid_vox_z']:.3g} units, rme {l['rme_start']:g}"
+            if "read_level" in l:
+                line += f"; reads stored level {l['read_level']} = {l['read_gvox']:.2f} Gvox per view"
+                if "dsz_cheap" in l:
+                    line += f" -- CHEAPER: dsz {l['dsz_cheap']} reads a stored level directly ({l['read_gvox_cheap']:.2f} Gvox)"
+            print(line)
         for s in g.get("intensity", []):
             if "error" in s:
                 print(f"      intensity view {s['view']}: {s['error']}")

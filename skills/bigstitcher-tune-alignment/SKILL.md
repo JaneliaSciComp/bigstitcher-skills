@@ -62,11 +62,18 @@ Decide with the user:
 
 ## 2. The ladder
 
-Detection downsampling `dsXY` in 8, 4, 2, 1 while every view keeps >= 256 px per axis; `dsZ = round(dsXY * vx / vz)`,
+Detection downsampling `dsXY` in 8, 4, 2, 1 while every view keeps >= 200 px per axis; `dsZ = round(dsXY * vx / vz)`,
 at least 1 (a near-isotropic detection grid). Start at the COARSEST USEFUL level: if a level yields fewer than
 ~100-200 points per view or most pairs fail, that level is too coarse for the structures (beads vanish when the
 DoG sigma spans them) -- move one level finer instead of lowering thresholds. On ds1-stitch (512 x 512 x 86)
 downsampling 4 found 445 points and 2 pairs; downsampling 2 is the first useful level.
+
+Mind the image pyramid: BigStitcher reads the coarsest STORED level that does not exceed the requested
+downsampling and downsamples the rest in memory. A request of 8/1 on a pyramid with levels (2,2,1), (4,4,2),
+(8,8,4) reads the (2,2,1) level -- 8.6 Gvox per view on a 4096 x 2560 x 3300 tile, minutes per view from a file
+server -- while 8/4 reads 0.14 Gvox directly. `inspect_dataset.py` prints the pyramid, what each level would read
+and the cheaper `dsZ`; on anisotropic data prefer the cheap variant at the coarse levels (an anisotropic grid is
+fine for finding the first registration) and the isotropic one once the registration is close.
 
 Carry the winner's registration into the next level (`sweep.sh --save`), shrink the search radius to ~3x the
 previous level's max error, and stop when the average error in physical units stops improving or full
