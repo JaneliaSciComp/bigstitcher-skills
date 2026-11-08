@@ -84,7 +84,7 @@ def cmd_table(a):
     rows.sort(key=key)
     hdr = ["#", "level", "label", "matcher", "solver", "points", "inliers", "pairs ok/failed", "cand", "solve avg/max px", "views", "rot deg", "scale", "shear", "flags"]
     lines = ["| " + " | ".join(hdr) + " |", "|" + "---|" * len(hdr)]
-    for i, r in enumerate(rows[: a.top], 1):
+    for i, r in enumerate(rows, 1):
         meta, d, m, s = r["meta"], r.get("detect", {}).get("totals", {}), r.get("match", {}).get("totals", {}), r.get("solve", {}).get("totals", {})
         flags = []
         if s:
@@ -113,14 +113,17 @@ def cmd_table(a):
             (f"{s['scale_range'][0]:.4f}..{s['scale_range'][1]:.4f}" if s.get("scale_range") else "-"),
             (f"{s['max_shear']:.4f}" if "max_shear" in s else "-"),
             ", ".join(flags) or "ok"]) + " |")
-    txt = "\n".join(lines)
+    full = "\n".join(lines)
     if a.md:
         with open(a.md, "w") as f:
-            f.write(f"# Alignment grid search: {a.runs}\n\nJudge = total RANSAC inliers; the other columns are tripwires "
-                    f"(rotation > {a.rot_tol} deg, |scale-1| > {a.scale_tol}, shear > {a.shear_tol}, unconnected views, failed pairs).\n\n" + txt + "\n")
-    print(txt)
+            f.write(f"# Alignment grid search: {a.runs}\n\n{len(rows)} runs. Judge = total RANSAC inliers; the other columns are tripwires "
+                    f"(rotation > {a.rot_tol} deg, |scale-1| > {a.scale_tol}, shear > {a.shear_tol}, unconnected views, failed pairs).\n\n" + full + "\n")
+    print("\n".join(lines[: a.top + 2]))
+    if len(rows) > a.top:
+        print(f"... {len(rows) - a.top} more rows (--top N; the markdown report has all {len(rows)})")
     if rows:
-        print(f"\nbest by inliers: {short(rows[0])}")
+        print(f"\nmost inliers: {short(rows[0])}")
+        print("pick = the simplest adequate solver of that matching: see `rank_runs.py best`")
 
 
 def flags_of(r, rot_tol, scale_tol, shear_tol):
@@ -152,10 +155,24 @@ def cmd_best(a):
         if not rows or a.strict:
             sys.exit(1)
         ok = rows
-    if a.prefer:
-        pref = [r for r in ok if r["meta"].get("solver") in a.prefer.split(",")]
-        ok = pref or ok
-    b = ok[0]
+    # the simplest adequate model: among the unflagged runs of the best (label, matcher) -- they share the matching, so the
+    # inliers are equal -- take the first solver in the preference order whose avg error is within --err-slack of the lowest
+    top = ok[0]
+    group = [r for r in ok if (r["meta"].get("label"), r["meta"].get("matcher")) == (top["meta"].get("label"), top["meta"].get("matcher"))]
+    errs = [r.get("solve", {}).get("totals", {}).get("avg_error") for r in group]
+    emin = min(e for e in errs if e is not None) if any(e is not None for e in errs) else None
+    order = [t for t in a.prefer.split(",") if t]
+    b = None
+    for tag in order:
+        for r in group:
+            e = r.get("solve", {}).get("totals", {}).get("avg_error")
+            if r["meta"].get("solver") == tag and (emin is None or e is None or e <= emin * (1 + a.err_slack)):
+                b = r
+                break
+        if b is not None:
+            break
+    if b is None:
+        b = top
     print(b["meta"]["label"], b["meta"]["solver"], b.get("solve", {}).get("totals", {}).get("max_error") or 0)
     print("best: " + short(b), file=sys.stderr)
 
@@ -184,7 +201,9 @@ def main():
     p = sub.add_parser("best", help="print 'LABEL SOLVER MAX_ERROR' of the best unflagged run (for ladder.sh)")
     p.add_argument("runs")
     p.add_argument("--level")
-    p.add_argument("--prefer", help="comma list of solver tags to prefer when they are unflagged, e.g. tr,rigid-tr")
+    p.add_argument("--prefer", default="tr,rigid-tr,affine-rigid,affine-tr",
+                   help="ORDERED solver preference, simplest first; the first one whose error is within --err-slack of the best wins (default tr,rigid-tr,affine-rigid,affine-tr)")
+    p.add_argument("--err-slack", type=float, default=0.05, help="relative avg-error slack for preferring a simpler model (default 0.05 = 5 %%)")
     p.add_argument("--strict", action="store_true", help="exit 1 when every run is flagged")
     p.add_argument("--rot-tol", type=float, default=1.0)
     p.add_argument("--scale-tol", type=float, default=0.01)

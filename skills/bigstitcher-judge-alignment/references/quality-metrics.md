@@ -38,6 +38,10 @@ tripwire, not a purity estimate.
 | rigid rotation of several degrees where none is expected | the sample moved, or a view is flipped / rotated by acquisition; the learned matcher is not rotation tolerant: use FAST_ROTATION or a manual rotation first |
 | change vs the start (`--ref`): corner displacement | a few px to tens of px for stage metadata; hundreds for a sloppy stage | a single view moving far more than the rest: its pairs are wrong |
 
+The solver judges the INCREMENT it computed; a coarse-to-fine chain stacks several increments. Judge the composite
+registration too (`registration_report.py` on the saved XML): three rigid increments of 0.3-0.7 deg each can sum
+to a rotation no single level would have flagged.
+
 Model choice on translation-close data: `TRANSLATION` is the safest with few points; `RIGID` regularised with
 `TRANSLATION` absorbs small rotations; `AFFINE` regularised with `RIGID` or `TRANSLATION` absorbs chromatic / optical
 scaling but needs many well-spread correspondences per view. Pick the simplest model whose residual is not
@@ -45,8 +49,7 @@ clearly worse than the next one.
 
 ## 3. The pictures (not available headlessly yet)
 
-A headless `screenshot` command for BigStitcher-Spark is being added (hand-off `~/BDV_SCREENSHOT_HANDOFF.md`).
-Until it exists, ask the user to look in BigStitcher / BigDataViewer at the pairs the report flags (two views in
+A headless `screenshot` command for BigStitcher-Spark is planned. Until it exists, ask the user to look in BigStitcher / BigDataViewer at the pairs the report flags (two views in
 two colours, the overlap region, a maximum projection and an xz slice), and check:
 
 - beads / nuclei appear once (white when the colours overlap), not as coloured doubles -> misalignment by the

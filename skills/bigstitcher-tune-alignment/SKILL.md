@@ -38,8 +38,12 @@ Read `references/parameters.md` for the flags and ranges, `references/ml-matchin
 ```bash
 BSS=$(bash SKILL_DIR/../bigstitcher-xml/scripts/find_bigstitcher_spark.sh)      # launcher directory; exit != 0: see that skill
 python3 SKILL_DIR/scripts/make_working_copy.py /data/run/dataset.xml /scratch/run_tune          # copies XML + points, links images
-python3 SKILL_DIR/scripts/inspect_dataset.py /scratch/run_tune/dataset.xml --intensity
+python3 SKILL_DIR/scripts/inspect_dataset.py /scratch/run_tune/dataset.xml --setups 0-5 --intensity
 ```
+Restrict every step to the views you align (`--setups` here, `-vi` / `--channelId` for the Java tools): the other
+channels of a tile overlap it 100 % and would swamp the pair list. `--intensity` needs a python with numpy and
+tensorstore (a pcmatch venv's `.venv/bin/python` has both; `PY=/path/python` for the scripts); without it the
+percentiles are skipped and you read min / max off BigStitcher.
 `inspect_dataset.py` prints the views and the attributes that vary (tile, channel, angle, illumination), the
 GROUPS of views sharing voxel size and image size, the transform stack with a RESET proposal, existing labels
 with their detection parameters, the overlapping pairs under the current registration, a downsampling LADDER per
@@ -53,12 +57,19 @@ Decide with the user:
 - **Groups.** Two groups with different voxel sizes or intensity ranges = different objectives / cameras: each
   group gets its own `-i0 -i1` and its downsampling scaled by the voxel-size ratio, detected into the SAME label.
 - **Start registration.** Translation-close data: reset to calibration + metadata placement,
-  `clear-registrations -x XML --keep N --dryRun` with the proposed N, read what goes, then without `--dryRun`.
-  If an existing registration is roughly right, keep it: the search radius can then be small.
+  `clear-registrations -x XML --keep N --dryRun` with the proposed N AND the same view selection (other channels
+  may carry a different stack), read what goes, then without `--dryRun`. If an existing registration is roughly
+  right, keep it: the search radius can then be small. Quantify the metadata error right after the reset:
+  `registration_report.py XML --ref XML.orig --setups ...` -- the "moved med/max" column is how far the previous
+  registration sat from the metadata; the first level's `RADIUS` = max(20, 3 x that max). The other channels of a
+  tile get the transforms afterwards in BigStitcher (Registration -> Duplicate Transformations); no Spark command
+  does that yet.
 - **Manual rotation.** A group known to be rotated (another objective, a camera at 90 deg):
   `python3 SKILL_DIR/scripts/add_rotation.py XML --setups 6-11 --axis y --degrees 90 --in-place` before anything
   else; afterwards `MATCHERS="geo fastrot"` only (no `emb`, no `pcm`).
-- **Intensity range.** One `-i0 -i1` per group from the percentiles (background .. p99.9-p99.99), not a hot pixel.
+- **Intensity range.** One `-i0 -i1` per group: `-i0` = the background level (p0.1 or the camera offset), `-i1`
+  = p99.9 .. p99.99 of a bright view. The threshold is relative to `i1 - i0`: a too-high `-i1` (a hot pixel, the
+  saturation value) lowers the effective threshold and floods the detection, a too-low one clips bright structure.
 
 ## 2. The ladder
 
@@ -66,7 +77,9 @@ Detection downsampling `dsXY` in 8, 4, 2, 1 while every view keeps >= 200 px per
 at least 1 (a near-isotropic detection grid). Start at the COARSEST USEFUL level: if a level yields fewer than
 ~100-200 points per view or most pairs fail, that level is too coarse for the structures (beads vanish when the
 DoG sigma spans them) -- move one level finer instead of lowering thresholds. On ds1-stitch (512 x 512 x 86)
-downsampling 4 found 445 points and 2 pairs; downsampling 2 is the first useful level.
+downsampling 4 gave DoG + geometric matching 445 points and 2 pairs, scale space + learned matching 935 points and
+270 inliers over all views -- usable but thin; downsampling 2 is the first solid level and the ladder proposal
+starts there (>= 200 px rule).
 
 Mind the image pyramid: BigStitcher reads the coarsest STORED level that does not exceed the requested
 downsampling and downsamples the rest in memory. A request of 8/1 on a pyramid with levels (2,2,1), (4,4,2),
@@ -97,13 +110,15 @@ with `-tm TRANSLATION -rm NONE -rme RME -rmni 12 -rmir 0 --clearCorrespondences`
 `--dryRun` (`TRANSLATION`, `RIGID` regularised with `TRANSLATION`, `AFFINE` with `RIGID`, `AFFINE` with
 `TRANSLATION`, lambda 0.1); one `runs.jsonl` row per (label, matcher, solver) and `report_<level>.md` ranked by
 the judge. Defaults and every knob are in the script header (`DETECTORS`, `FACTORS`, `MATCHERS`, `SOLVERS`,
-`RME`, `RADIUS`, `TYPE=BOTH`, `EXTRA_DETECT`, ...). Re-running skips finished steps. Expect a few seconds per
-JVM on small data; detections on full-resolution NFS data are the slow part (few Spark tasks there).
+`RME`, `RADIUS`, `TYPE=BOTH`, `EXTRA_DETECT`, ...). Re-running skips finished steps. A JVM launch takes seconds;
+the slow steps are `embed-interestpoints` on many points (160k points: ~2.5 min on the CPU) and detections that
+read fine pyramid levels from a file server (see the ladder section).
 
-Read the result with `rank_runs.py table OUT/runs.jsonl` and judge it (step 4). Typical adaptations:
+Read the result with `rank_runs.py table OUT/runs.jsonl` (the console shows the top 40, `--top N` for more; the
+markdown report holds every row) and judge it (step 4). Typical adaptations:
 - too few points everywhere -> finer level (not a lower threshold); a single empty view -> drop it (`filter_bigstitcher_xml.py`)
-- noise floors differing 10x between views (the sweep prints the spread) -> the highest view is structure, not
-  noise: pass `-t` = 2.5 x the median floor via `EXTRA_DETECT`, or go finer
+- noise floors differing 3x or more between views (the sweep prints a NOTE) -> the highest view is structure, not
+  noise, and the dim views lose their points: pass `-t` = 2.5 x the median floor via `EXTRA_DETECT`, or go finer
 - millions of points on dense tissue -> keep the 10x-20x response filter, `--maxSpots 50000`
 - sparse sample -> `TYPE=BOTH` (DoG minima nearly double the correspondences)
 - pairs fail only for the learned matcher -> `RADIUS` too small for the metadata error; only for geo -> expected on
@@ -118,8 +133,11 @@ bash SKILL_DIR/scripts/sweep.sh --save /scratch/run_tune/dataset.xml /scratch/ru
 ```
 
 **The whole ladder in one command** -- `ladder.sh` runs `sweep.sh` per level, picks the best UNFLAGGED run
-(`rank_runs.py best`: most inliers, tripwires clean; `PREFER_SOLVERS=tr,rigid-tr` to prefer simpler models),
-saves it and shrinks the search radius to max(20, 3 x the saved solve's max error):
+(`rank_runs.py best`: the matching with the most inliers, then the SIMPLEST solver model whose average error is
+within 5 % of the lowest -- order `tr, rigid-tr, affine-rigid, affine-tr`, `PREFER_SOLVERS` / `--err-slack`
+change it; a rigid or affine increment that buys 0.01 px is not worth stacking), saves it, re-checks the COMPOSITE
+registration against the translation-close rule (the solver only judges its own increment; `LADDER_STRICT=1` stops
+on a flag) and shrinks the search radius to max(20, 3 x the saved solve's max error):
 ```bash
 bash SKILL_DIR/scripts/ladder.sh /scratch/run_tune/dataset.xml /scratch/run_tune_results "8,8 4,4 2,2"    # levels DSXY,DSZ coarse first
 ```
@@ -143,4 +161,6 @@ Write `report.md` next to the results: the ranked table per level, the pick with
 the exact BigStitcher-Spark command lines to reproduce it (detect / filter / match / solve) plus the GUI-equivalent
 settings, the open doubts (pairs to look at), and -- for large mosaics -- the confirmation on the TEST block.
 Point the user at the working copy's XML as the deliverable; never copy anything back into the original project
-without being asked.
+without being asked. The grid leaves its labels behind (two detections plus one filtered label per factor and
+matcher, per level): either apply the pick to a fresh working copy with the pinned ladder, or remove them with
+`clear-interestpoints --clearMode REMOVE_LABEL --label <name>` (bigstitcher-xml skill).

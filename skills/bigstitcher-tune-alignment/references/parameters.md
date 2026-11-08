@@ -48,7 +48,7 @@ the detector parameters pcmatch needs, and filtered labels share their base's em
 | `-m ICP` | iterative closest point, refinement only (`-ime`, `-iit`) | |
 | `-m LOAD_CANDIDATES --candidatesPath X.n5` | RANSAC on candidates you computed elsewhere | |
 | `-tm TRANSLATION | RIGID | AFFINE` + `-rm NONE | TRANSLATION | RIGID | AFFINE --lambda 0.1` | the PAIRWISE RANSAC model (and its regulariser). Translation-close problems: `-tm TRANSLATION -rm NONE` | |
-| `-rme E` | RANSAC max error in global px: about the localisation error at the detection level, ~2.5 x dsXY at coarse levels, 2 at full resolution | |
+| `-rme E` | RANSAC max error in global px: about the localisation error at the detection level, ~2.5 x dsXY at coarse levels, 2-2.5 at full resolution (sweep.sh: max(2, 2.5 x dsXY)) | |
 | `-rmni N` | min inliers per pair (default 12); `-rmir 0` (min inlier ratio, 0.05 by default) | 12 / 0 |
 | `-rit` | RANSAC iterations (10,000) | |
 | `-rmc` | multi-consensus: several rigid pieces per pair (non-rigid / split samples; `-rmni` default 30 then) | off |
@@ -97,6 +97,21 @@ calibration first, then the metadata placement ("Translation to Regular Grid" / 
 then registration results. `inspect_dataset.py` proposes N. `clear-interestpoints --clearMode REMOVE_LABEL --label L`
 removes a label (XML + store), `CLEAR_ALL_CORRESPONDENCES` keeps detections and drops every link. No undo; `--dryRun`
 first. Details in the `bigstitcher-xml` skill.
+
+## GUI equivalents (BigStitcher, Fiji)
+
+| Spark | BigStitcher GUI |
+|---|---|
+| `detect-interestpoints --method DOG -s -t -dsxy -dsz -i0 -i1 --type` | Detect Interest Points: Difference-of-Gaussian; Sigma, Threshold, Downsample XY / Z, Min / Max intensity, Find maxima / minima / both; "Advanced" shows the interactive sigma / threshold preview |
+| `--method SCALE_SPACE -s --steps --octaves` | Detect Interest Points: Scale-space Difference-of-Gaussian (multiview-reconstruction 10 with the scale-space branch); initial sigma, steps per octave |
+| `--noiseFactor F` | the GUI's threshold preview suggests "F x noise"; otherwise type the derived threshold |
+| `--overlappingOnly` | "Only in overlapping regions" |
+| `filter-interestpoints --response` | Interest points > Filter (response range) / thinning |
+| `match-interestpoints -m PRECISE_TRANSLATION / FAST_ROTATION / ICP` | Register using Interest Points: "Precise descriptor-based (translation invariant)" / "Fast descriptor-based (rotation invariant)" / "Iterative closest point" |
+| `-m EMBEDDINGS` + `embed-interestpoints` | Interest points > Embed (learned descriptor) then "Learned descriptor matching" (recent BigStitcher builds only) |
+| `-tm / -rm / --lambda`, `-rme -rmni -rmir -rit`, `-rmc` | the pairwise "Transformation model" + "Regularize with", RANSAC max error / min inliers / min inlier ratio / iterations, "Multi-consensus" |
+| `solver -tm -rm --lambda -fv --method` | Register using Interest Points, global optimization: model + regularization, "Fix views", "Simple / Iterative / Two-round" |
+| `clear-registrations --keep N` | Registration > Remove Transformations (keep the first N) |
 
 ## Typical starting points by sample
 

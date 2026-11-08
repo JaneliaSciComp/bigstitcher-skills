@@ -63,7 +63,8 @@ if [ $MODE = save ]; then
   REP=$HERE/../../bigstitcher-judge-alignment/scripts/registration_report.py
   PYNP=$PY; $PYNP -c 'import numpy' 2>/dev/null || { [ -n "${PCMATCH:-}" ] && [ -x "$(dirname "$PCMATCH")/python" ] && PYNP=$(dirname "$PCMATCH")/python; }
   if [ -f "$REP" ] && $PYNP -c 'import numpy' 2>/dev/null; then
-    $PYNP "$REP" "$XML" ${XML_ORIG:+--ref "$XML_ORIG"} $( [ -f "$XML.orig" ] && [ -z "${XML_ORIG:-}" ] && echo --ref "$XML.orig") | tee "$OUT/registration_after_${LAB}_$S.txt"
+    SETUPS=$(echo "$VIEWS" | tr ' ' '\n' | grep -A1 -x -- '-vi' | grep -v -- '-vi\|--' | cut -d, -f2 | paste -sd, -)
+    $PYNP "$REP" "$XML" ${SETUPS:+--setups "$SETUPS"} ${XML_ORIG:+--ref "$XML_ORIG"} $( [ -f "$XML.orig" ] && [ -z "${XML_ORIG:-}" ] && echo --ref "$XML.orig") | tee "$OUT/registration_after_${LAB}_$S.txt"
   else log "registration_report.py skipped (needs a python with numpy: set PY=/path/python)"; fi
   log "SAVED: $LAB / $S written into $XML (copy: $OUT/solved_${LAB}_$S.xml)"
   exit 0
@@ -88,7 +89,7 @@ detect() { # detector -> LABEL_BASE NOISE_FLOOR
   read -r NOISE_FLOOR NPTS MINPTS SPREAD < <($PY "$PARSE" "$OUT/detect_$lab.log" --json - | $PY -c 'import json,sys; r=json.load(sys.stdin); t=r.get("threshold") or {}
 p=r.get("noise_floor_pooled") or {}; print(t.get("noise_floor", 0), r["totals"]["points"], r["totals"]["min"], (p.get("max", 0) / p["median"]) if p.get("median") else 0)')
   log "detected $lab: $NPTS points (min per view $MINPTS), noise floor $NOISE_FLOOR = highest view (spread highest/median ${SPREAD}x), threshold $(awk "BEGIN{print $NF*$NOISE_FLOOR}")"
-  awk "BEGIN{exit !($SPREAD > 5)}" && log "  NOTE: the per-view noise floors differ by ${SPREAD}x -- the highest view is probably structure, not noise; consider -t NF x the median floor, or a finer level"
+  awk "BEGIN{exit !($SPREAD > 3)}" && log "  NOTE: the per-view noise floors differ by ${SPREAD}x -- the highest view is probably structure, not noise; consider -t NF x the median floor, or a finer level"
   [ "$MINPTS" -lt 100 ] && log "  NOTE: a view has only $MINPTS points -- too coarse a level or too high a threshold; expect failed pairs"
   return 0
 }

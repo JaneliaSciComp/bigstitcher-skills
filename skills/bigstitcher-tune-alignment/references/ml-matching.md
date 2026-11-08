@@ -44,6 +44,18 @@ pcmatch match -x XML -l LABEL -vi 0,0 -vi 0,1 ... --radius RADIUS --ratio 0.85 -
 - pcmatch also has the judges with ground truth (`pcmatch eval registration`) and `pcmatch inspect`.
 - Needs the pcmatch checkout's venv (`.venv/bin/pcmatch`); set `PCMATCH=/path/.venv/bin/pcmatch` for the sweep.
 
+## The two drivers are not bit-identical (observed 2026-11-08)
+
+- pcmatch finds 5-20 % more inliers than `-m EMBEDDINGS` on the same points and radius (ds1-stitch full resolution:
+  14,576 vs 12,363; mouse head coarse levels within 3 %); the solves agree to 0.01 px. Treat the gap as a property
+  of the drivers, not of the settings.
+- pcmatch's minimum-inlier rule is applied before its final consistency filter, so a pair can be kept with
+  `rmni - 1` inliers where the Java matcher rejects it; at a coarse level this can decide whether a weak pair
+  connects a view. Read `pairs ok / failed` with that in mind.
+- pcmatch uses the vectors stored by `embed-interestpoints` when the label has them (`--embeddings auto`), and
+  embeds live on the GPU otherwise; the order of the matchers in a sweep therefore changes what it reads, not
+  the result.
+
 ## When to use which
 
 | situation | arm |

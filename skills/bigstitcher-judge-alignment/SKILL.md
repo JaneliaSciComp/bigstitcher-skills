@@ -40,8 +40,7 @@ of the verdict are missing.
    |scale - 1| <= 1 %, shear <= 1 %), the overlapping pairs with their relative rotation and scale, and the change
    against the start (corner displacement per view, relative change per pair). A view that moved far more than
    the others, or an affine that drifted into scale / shear, means wrong or too few links on that view.
-5. **Pictures.** Not possible headlessly yet (a `screenshot` command for BigStitcher-Spark is being added; see
-   `~/BDV_SCREENSHOT_HANDOFF.md`). Until then, name the pairs to look at in BigStitcher / BigDataViewer -- the
+5. **Pictures.** Not possible headlessly yet (a `screenshot` command for BigStitcher-Spark is planned). Until then, name the pairs to look at in BigStitcher / BigDataViewer -- the
    failed ones, the ones with the fewest inliers, the view with the largest change -- and what to look for:
    doubled beads or nuclei (a translation error of the double's distance), a step at a tile seam, a repetitive
    structure shifted by one period, empty tiles.

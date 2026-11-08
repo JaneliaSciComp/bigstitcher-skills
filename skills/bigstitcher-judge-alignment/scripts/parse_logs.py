@@ -56,7 +56,7 @@ RE_REMOVED_N = re.compile(r"Removed (\d+) inconsistent link\(s\) in (\d+) iterat
 RE_GROUPS = re.compile(r"Identified (\d+) \(dis\)connected groups")
 RE_GLOBOPT = re.compile(r"Global optimization of (\d+)(?: view-tiles \(Model=(\w+)\))?")
 RE_MODEL = re.compile(r"^tpId=(\d+) setupId=(\d+): \(([^)]*)\), \(([^)]*)\), \(([^)]*)\)(.*)$")
-RE_PCM_PAIR = re.compile(r"\((\d+), (\d+)\)<->\((\d+), (\d+)\): cand=(\d+) -> (\d+) inliers")
+RE_PCM_PAIR = re.compile(r"\((\d+), (\d+)\)<->\((\d+), (\d+)\): cand=(\d+) -> (?:(\d+) inliers|no model|no consensus set)")
 RE_PCM_TOTAL = re.compile(r"RANSAC: (\d+) correspondences over (\d+) pair\(s\)")
 RE_PCM_CAND = re.compile(r"(\d+) candidates over (\d+) pair\(s\)")
 RE_FIXED = re.compile(r"fixedViews: \[(.*?)\]")
@@ -348,8 +348,9 @@ def parse_pcmatch(lines):
     for raw in lines:
         m = RE_PCM_PAIR.search(raw)
         if m:
-            pairs[f"{m.group(1)},{m.group(2)}>{m.group(3)},{m.group(4)}"] = {"candidates": int(m.group(5)), "inliers": int(m.group(6)),
-                                                                           "status": "ok" if int(m.group(6)) else "no_model"}
+            inl = int(m.group(6)) if m.group(6) else 0
+            pairs[f"{m.group(1)},{m.group(2)}>{m.group(3)},{m.group(4)}"] = {"candidates": int(m.group(5)), "inliers": inl,
+                                                                           "status": "ok" if inl else "no_model"}
         m = RE_PCM_TOTAL.search(raw)
         if m:
             tot["inliers_total"], tot["pairs_ok"] = int(m.group(1)), int(m.group(2))
@@ -359,6 +360,7 @@ def parse_pcmatch(lines):
     inl = [p["inliers"] for p in pairs.values() if p["inliers"]]
     tot.setdefault("inliers_total", sum(inl))
     tot.update({"pairs_reported": len(pairs), "pairs_failed": sum(1 for p in pairs.values() if not p["inliers"]),
+                "failures": ["no_model"] if any(not p["inliers"] for p in pairs.values()) else [],
                 "inliers_min": min(inl) if inl else 0, "inliers_median": statistics.median(inl) if inl else 0, "inliers_max": max(inl) if inl else 0})
     return {"pairs": pairs, "totals": tot}
 
