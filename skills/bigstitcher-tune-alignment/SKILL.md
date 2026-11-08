@@ -110,15 +110,18 @@ with `-tm TRANSLATION -rm NONE -rme RME -rmni 12 -rmir 0 --clearCorrespondences`
 `--dryRun` (`TRANSLATION`, `RIGID` regularised with `TRANSLATION`, `AFFINE` with `RIGID`, `AFFINE` with
 `TRANSLATION`, lambda 0.1); one `runs.jsonl` row per (label, matcher, solver) and `report_<level>.md` ranked by
 the judge. Defaults and every knob are in the script header (`DETECTORS`, `FACTORS`, `MATCHERS`, `SOLVERS`,
-`RME`, `RADIUS`, `TYPE=BOTH`, `EXTRA_DETECT`, ...). Re-running skips finished steps. A JVM launch takes seconds;
+`RME`, `RADIUS`, `TYPE=BOTH`, `EXTRA_DETECT`, `FLOOR=median`, ...). Re-running skips finished steps. A JVM launch takes seconds;
 the slow steps are `embed-interestpoints` on many points (160k points: ~2.5 min on the CPU) and detections that
 read fine pyramid levels from a file server (see the ladder section).
 
 Read the result with `rank_runs.py table OUT/runs.jsonl` (the console shows the top 40, `--top N` for more; the
 markdown report holds every row) and judge it (step 4). Typical adaptations:
 - too few points everywhere -> finer level (not a lower threshold); a single empty view -> drop it (`filter_bigstitcher_xml.py`)
-- noise floors differing 3x or more between views (the sweep prints a NOTE) -> the highest view is structure, not
-  noise, and the dim views lose their points: pass `-t` = 2.5 x the median floor via `EXTRA_DETECT`, or go finer
+- noise floors differing 3x or more between views (the sweep prints a NOTE; a view with 0 points is the extreme
+  case) -> the tool pools the floors as the HIGHEST view, so a bright or structure-rich tile starves the dim ones:
+  rerun the level with `FLOOR=median` (a `--dryRun` probe, then `-t` = 2.5 x the median floor; add `--maxSpots
+  50000` via `EXTRA_DETECT` so the bright tile does not explode). ds6-mouse-head's test block: 40x spread, one tile
+  with 0 points and 3 of 4 views connected with the default pooling
 - millions of points on dense tissue -> keep the 10x-20x response filter, `--maxSpots 50000`
 - sparse sample -> `TYPE=BOTH` (DoG minima nearly double the correspondences)
 - pairs fail only for the learned matcher -> `RADIUS` too small for the metadata error; only for geo -> expected on

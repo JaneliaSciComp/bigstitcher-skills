@@ -13,6 +13,8 @@
 #                         FACTORS="2.5 5 10"   response ladder in multiples of the noise floor (<= NF = the unfiltered detection)
 #                         OVERLAP="--overlappingOnly --onlyCompareOverlapTiles"   EXTRA_DETECT="" (both detectors, e.g. --maxSpots 50000)
 #                         EXTRA_DOG="" (e.g. --anisotropy 2.55 = 0.8 x the z/x voxel ratio, the GUI's suggestion)   EXTRA_SS="" (default anisotropy = calibration)
+#                         FLOOR=highest|median  how the per-view noise floors are pooled for the threshold: the tool's rule (highest view) or a
+#                                               --dryRun probe + -t = NF x the MEDIAN floor (dim tiles next to a bright one; labels get the suffix m)
 #                         MATCHERS="geo emb"   (geo = PRECISE_TRANSLATION, fastrot = FAST_ROTATION, emb = Java EMBEDDINGS, pcm = pcmatch)
 #                         RME (default max(2, 2.5*DSXY) global px)   RMNI=12   RMIR=0   SR="" (geo search radius; empty = unlimited)
 #                         RADIUS=100  (emb / pcm search radius = the registration's uncertainty in global px)   RATIO=0.85   MINSIM=0.3
@@ -82,12 +84,27 @@ detect() { # detector -> LABEL_BASE NOISE_FLOOR
   local d=$1 flags lab="${1}_${LEVEL}_nf${NF}"; [ "$TYPE" != MAX ] && lab="${lab}_$(echo "$TYPE" | tr 'A-Z' 'a-z')"
   case $d in dog) flags="--method DOG -s $SIGMA_DOG ${EXTRA_DOG:-}";; ss) flags="--method SCALE_SPACE -s $SIGMA_SS --steps 4 --octaves -1 ${EXTRA_SS:-}";;
     *) log "unknown detector '$d' (dog | ss)"; return 1;; esac
+  local thr_flags="--noiseFactor $NF"
+  if [ "${FLOOR:-highest}" = median ]; then
+    # the tool pools the per-view noise floors as the HIGHEST view; a bright / structure-rich tile then starves the dim ones.
+    # FLOOR=median: probe the floors with a --dryRun pass, then detect with -t = NF x the MEDIAN floor (label suffix 'm').
+    lab="${lab}m"
+    if ! { has_label "$lab" && [ -s "$OUT/detect_$lab.log" ]; }; then
+      run "probe_$lab" "$BSS/detect-interestpoints" -x "$XML" -l "$lab" $flags --noiseFactor "$NF" -dsxy "$DSXY" -dsz "$DSZ" -i0 "$I0" -i1 "$I1" \
+          --type "$TYPE" $OVERLAP $EXTRA_DETECT $VIEWS $SPARK --dryRun || return 1
+      MEDFLOOR=$($PY "$PARSE" "$OUT/probe_$lab.log" --json - | $PY -c 'import json,sys; r=json.load(sys.stdin); p=r.get("noise_floor_pooled") or {}; print(p.get("median", 0))')
+      [ "$MEDFLOOR" != 0 ] || { log "no noise floor in the probe log"; return 1; }
+      thr_flags="-t $(awk "BEGIN{printf \"%.6g\", $NF*$MEDFLOOR}")"
+      log "probe $lab: median noise floor $MEDFLOOR (highest $($PY "$PARSE" "$OUT/probe_$lab.log" --json - | $PY -c 'import json,sys; print((json.load(sys.stdin).get("noise_floor_pooled") or {}).get("max", 0))')) -> $thr_flags"
+    fi
+  fi
   if has_label "$lab" && [ -s "$OUT/detect_$lab.log" ]; then log "label $lab exists, detection skipped"
-  else run "detect_$lab" "$BSS/detect-interestpoints" -x "$XML" -l "$lab" $flags --noiseFactor "$NF" -dsxy "$DSXY" -dsz "$DSZ" -i0 "$I0" -i1 "$I1" \
+  else run "detect_$lab" "$BSS/detect-interestpoints" -x "$XML" -l "$lab" $flags $thr_flags -dsxy "$DSXY" -dsz "$DSZ" -i0 "$I0" -i1 "$I1" \
            --type "$TYPE" $OVERLAP $EXTRA_DETECT $VIEWS $SPARK || return 1; fi
   LABEL_BASE=$lab
   read -r NOISE_FLOOR NPTS MINPTS SPREAD < <($PY "$PARSE" "$OUT/detect_$lab.log" --json - | $PY -c 'import json,sys; r=json.load(sys.stdin); t=r.get("threshold") or {}
-p=r.get("noise_floor_pooled") or {}; print(t.get("noise_floor", 0), r["totals"]["points"], r["totals"]["min"], (p.get("max", 0) / p["median"]) if p.get("median") else 0)')
+p=r.get("noise_floor_pooled") or {}; fl=t.get("noise_floor") or (p.get("median", 0) if "'"${FLOOR:-highest}"'" == "median" else p.get("max", 0))
+print(fl, r["totals"]["points"], r["totals"]["min"], (p.get("max", 0) / p["median"]) if p.get("median") else 0)')
   log "detected $lab: $NPTS points (min per view $MINPTS), noise floor $NOISE_FLOOR = highest view (spread highest/median ${SPREAD}x), threshold $(awk "BEGIN{print $NF*$NOISE_FLOOR}")"
   awk "BEGIN{exit !($SPREAD > 3)}" && log "  NOTE: the per-view noise floors differ by ${SPREAD}x -- the highest view is probably structure, not noise; consider -t NF x the median floor, or a finer level"
   [ "$MINPTS" -lt 100 ] && log "  NOTE: a view has only $MINPTS points -- too coarse a level or too high a threshold; expect failed pairs"
