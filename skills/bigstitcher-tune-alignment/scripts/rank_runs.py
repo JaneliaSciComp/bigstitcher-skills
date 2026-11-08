@@ -86,20 +86,10 @@ def cmd_table(a):
     lines = ["| " + " | ".join(hdr) + " |", "|" + "---|" * len(hdr)]
     for i, r in enumerate(rows, 1):
         meta, d, m, s = r["meta"], r.get("detect", {}).get("totals", {}), r.get("match", {}).get("totals", {}), r.get("solve", {}).get("totals", {})
-        flags = []
+        flags = flags_of(r, a.rot_tol, a.scale_tol, a.shear_tol)
         if s:
-            if s.get("views_missing"):
-                flags.append(f"{s['views_missing']} view(s) unconnected")
-            if s.get("max_rotation_deg", 0) > a.rot_tol:
-                flags.append("rotation")
-            if s.get("scale_range") and max(abs(s["scale_range"][0] - 1), abs(s["scale_range"][1] - 1)) > a.scale_tol:
-                flags.append("scale")
-            if s.get("max_shear", 0) > a.shear_tol:
-                flags.append("shear")
-            if s.get("failure"):
-                flags.append("SOLVE FAILED")
             if s.get("avg_error") is not None and a.err_tol and s["avg_error"] > a.err_tol:
-                flags.append("error")
+                flags.append("error > err-tol")
         if m.get("pairs_failed"):
             flags.append(f"{m['pairs_failed']} pair(s) failed")
         if r.get("match", {}).get("exceptions") or r.get("solve", {}).get("exceptions"):
@@ -139,6 +129,13 @@ def flags_of(r, rot_tol, scale_tol, shear_tol):
         f.append("scale")
     if s.get("max_shear", 0) > shear_tol:
         f.append("shear")
+    # RANSAC accepted every pair with residuals <= rme (typically rme/3); a global solve ABOVE rme means the pairs contradict each other
+    try:
+        rme = float(r["meta"].get("rme", 0) or 0)
+    except ValueError:
+        rme = 0.0
+    if rme and s.get("avg_error") is not None and s["avg_error"] > rme:
+        f.append(f"error {s['avg_error']:.1f} > rme {rme:g}")
     return f
 
 

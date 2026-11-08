@@ -136,9 +136,11 @@ bash SKILL_DIR/scripts/sweep.sh --save /scratch/run_tune/dataset.xml /scratch/ru
 ```
 
 **The whole ladder in one command** -- `ladder.sh` runs `sweep.sh` per level, picks the best UNFLAGGED run
-(`rank_runs.py best`: the matching with the most inliers, then the SIMPLEST solver model whose average error is
-within 5 % of the lowest -- order `tr, rigid-tr, affine-rigid, affine-tr`, `PREFER_SOLVERS` / `--err-slack`
-change it; a rigid or affine increment that buys 0.01 px is not worth stacking), saves it, re-checks the COMPOSITE
+(`rank_runs.py best`: tripwires clean = all views connected, solve error <= the RANSAC tolerance `RME`, rotation /
+scale / shear within the translation-close rule; then the matching with the most inliers and the SIMPLEST solver
+model whose average error is within 5 % of the lowest -- order `tr, rigid-tr, affine-rigid, affine-tr`,
+`PREFER_SOLVERS` / `--err-slack` change it; a rigid or affine increment that buys 0.01 px is not worth stacking),
+saves it, re-checks the COMPOSITE
 registration against the translation-close rule (the solver only judges its own increment; `LADDER_STRICT=1` stops
 on a flag) and shrinks the search radius to max(20, 3 x the saved solve's max error):
 ```bash
