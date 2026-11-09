@@ -9,9 +9,10 @@ Registration in BigStitcher is detect -> match -> solve, and the three stages hi
 solver error of 2 px can come from a perfect alignment of too few points or from a wrong link on one pair. This
 skill makes the search systematic: a small grid at a coarse resolution, the winner carried to the next finer
 level, every run recorded, and a verdict from the numbers (the `bigstitcher-judge-alignment` skill). It drives the
-installed BigStitcher-Spark commands only; no Java source is needed. Pictures of the data are not available
-headlessly yet (a `screenshot` command is being added) -- say so and ask the user to look at the flagged pairs in
-BigStitcher when the numbers leave doubt.
+installed BigStitcher-Spark commands only; no Java source is needed. Pictures of the data come from
+BigStitcher-Spark's `screenshot` (0.1.4+): `ladder.sh` renders the overlapping pairs of every saved level into
+`shots_<label>_<solver>/` (magenta / green, xy + xz) through the judge skill's `render_pairs.sh`, and the judge skill
+says how to read them. Without a `screenshot` launcher the ladder notes it and the numbers have to do.
 
 Scope for now: differential alignments close to translations (tiles, cameras, objectives of one acquisition),
 optionally after a known manual rotation of a view group. The learned matcher is NOT rotation tolerant: after a
@@ -143,7 +144,9 @@ model whose average error is within 5 % of the lowest -- order `tr, rigid-tr, af
 `PREFER_SOLVERS` / `--err-slack` change it; a rigid or affine increment that buys 0.01 px is not worth stacking),
 saves it, re-checks the COMPOSITE
 registration against the translation-close rule (the solver only judges its own increment; `LADDER_STRICT=1` stops
-on a flag) and shrinks the search radius to max(20, 3 x the saved solve's max error):
+on a flag), renders the pair pictures of the saved registration into `shots_<label>_<solver>/` (`SHOTS=0` skips
+them, `SHOT_ARGS` adds `screenshot` flags such as `--render slice`; big blocks are projected as a slab, see the judge
+skill) and shrinks the search radius to max(20, 3 x the saved solve's max error):
 ```bash
 bash SKILL_DIR/scripts/ladder.sh /scratch/run_tune/dataset.xml /scratch/run_tune_results "8,8 4,4 2,2"    # levels DSXY,DSZ coarse first
 ```
@@ -160,12 +163,19 @@ inliers (more true correspondences = a better constrained solve); the solver's a
 views, failed pairs and the per-view transform plausibility (rotation <= 1 deg, |scale - 1| <= 1 %, shear <= 1 % on
 translation-close data) are tripwires. `parse_logs.py` reads any log, `registration_report.py XML --ref
 XML.orig` shows what the registration changed. Prefer the simplest solver model whose error is not clearly worse.
+Then look at the pictures of the saved level, `OUT/ds<X>-<Z>/shots_<label>_<solver>/` (`contact_sheet.py DIR --plane
+xy` for all pairs at once, the full-size PNG for anything suspicious): white where the views agree, magenta / green
+doubles where they do not, xz for z errors. A level whose numbers are fine but whose pictures show doubles has
+matched a repetitive structure one period off or a pair on noise -- that pair goes into the report, and the next
+level's radius must not be shrunk around the wrong answer. For a picture of a configuration the ladder did not
+save, run `render_pairs.sh` on a `solved_<label>_<solver>.xml` copy (same directory, so the images resolve).
 
 ## 5. Report
 
 Write `report.md` next to the results: the ranked table per level, the pick with the reasons (and what it beat),
 the exact BigStitcher-Spark command lines to reproduce it (detect / filter / match / solve) plus the GUI-equivalent
-settings, the open doubts (pairs to look at), and -- for large mosaics -- the confirmation on the TEST block.
+settings, the pictures of the final level (the sheet and the weakest pairs by name, with what they show), the open
+doubts, and -- for large mosaics -- the confirmation on the TEST block.
 Point the user at the working copy's XML as the deliverable; never copy anything back into the original project
 without being asked. The grid leaves its labels behind (two detections plus one filtered label per factor and
 matcher, per level): either apply the pick to a fresh working copy with the pinned ladder, or remove them with

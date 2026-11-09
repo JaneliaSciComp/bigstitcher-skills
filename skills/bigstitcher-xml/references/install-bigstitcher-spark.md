@@ -30,7 +30,8 @@ It resolves the latest GitHub release, downloads `BigStitcher-Spark-<v>-local.ja
 verifies it, and writes one executable per command into the directory: `resave`, `detect-interestpoints`,
 `match-interestpoints`, `stitching`, `solver`, `match-intensities`, `solve-intensities`, `create-fusion-container`,
 `fusion`, `nonrigid-fusion`, `split-images`, `filter-views`, `downsample`, `clear-interestpoints`,
-`clear-registrations`, `transform-points`, `overlay-landmarks`, plus `bigstitcher-spark`, which exposes all of them
+`clear-registrations`, `transform-points`, `overlay-landmarks`, `define-dataset`, `apply-transformation`, `screenshot`
+(headless BDV pictures, 0.1.4+), plus `bigstitcher-spark`, which exposes all of them
 as subcommands. Each executable runs `java -Xmx<mem>g -Dspark.master=local[<threads>] -jar <jar> <command>`;
 `JAVA_OPTS` adds JVM options. Running it again in the same directory updates to the latest release.
 

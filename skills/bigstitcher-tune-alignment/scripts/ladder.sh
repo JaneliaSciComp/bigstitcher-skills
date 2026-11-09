@@ -10,6 +10,9 @@
 # solver whose avg error is within ERR_SLACK (default 0.05) of the best unflagged one is chosen. LADDER_STRICT=1 stops when the
 # COMPOSITE registration fails the translation-close check after a save.
 # Each level's report: OUTBASE/ds<X>-<Z>/report_ds<X>-<Z>.md; the saved XML copies: OUTBASE/ds<X>-<Z>/solved_<label>_<solver>.xml.
+# After every save the pair pictures of the saved registration go to OUTBASE/ds<X>-<Z>/shots_<label>_<solver>/ (render_pairs.sh of the
+# judge skill: every overlapping pair, xy + xz, screenshots.json; VIEWS is honoured). SHOTS=0 skips them, SHOT_ARGS adds screenshot flags
+# (e.g. SHOT_ARGS="--render slice --planes xy"); without a `screenshot` launcher (BigStitcher-Spark < 0.1.4) the ladder just notes it.
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 XML=$(readlink -f "${1:?XML}"); OUTBASE=$(readlink -f "${2:?OUTBASE}"); LEVELS=${3:?levels, e.g. "8,8 4,4 2,2"}
@@ -30,6 +33,15 @@ for lv in $LEVELS; do
   if grep -q 'FLAG' "$OUT/registration_after_${LAB}_$SOL.txt" 2>/dev/null; then
     echo "[$(date +%T)] COMPOSITE FLAG after level $L: $(grep -m1 'translation-close check' "$OUT/registration_after_${LAB}_$SOL.txt")" | tee -a "$OUTBASE/ladder.log"
     [ -n "${LADDER_STRICT:-}" ] && { echo "stopping (LADDER_STRICT); undo with clear-registrations --remove 1" | tee -a "$OUTBASE/ladder.log"; exit 1; }
+  fi
+  # pictures of the saved registration (BigStitcher-Spark 0.1.4+ screenshot via the judge skill; SHOTS=0 skips; exit 3 = no launcher)
+  if [ "${SHOTS:-1}" != 0 ]; then
+    SHOTS_DIR="$OUT/shots_${LAB}_$SOL"
+    if bash "$HERE/../../bigstitcher-judge-alignment/scripts/render_pairs.sh" "$XML" "$SHOTS_DIR" ${SHOT_ARGS:-} >> "$OUTBASE/ladder.log" 2>&1; then
+      echo "[$(date +%T)] pictures: $SHOTS_DIR (pair_*.png, screenshots.json; contact_sheet.py for a first look)" | tee -a "$OUTBASE/ladder.log"
+    else
+      echo "[$(date +%T)] no pictures for level $L (render_pairs.sh failed: no screenshot launcher or render error, see ladder.log)" | tee -a "$OUTBASE/ladder.log"
+    fi
   fi
   export RADIUS=$(awk "BEGIN{r=3*$MAXERR; print (r<$RADIUS_MIN)?$RADIUS_MIN:r}")
   echo "[$(date +%T)] saved; next search radius $RADIUS" | tee -a "$OUTBASE/ladder.log"
