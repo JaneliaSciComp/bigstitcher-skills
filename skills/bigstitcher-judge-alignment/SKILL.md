@@ -15,7 +15,7 @@ template -- read it the first time.
 ## Inputs to collect
 
 - the XML after the solve (and, if it exists, the start: `dataset.xml.orig` or the XML before the solve)
-- the logs: `detect-interestpoints`, `match-interestpoints` (or `pcmatch match`), `solver` -- or, when the run
+- the logs: `detect-interestpoints`, `match-interestpoints`, `solver` -- or, when the run
   was in the GUI, the numbers the user can read off (points per view, inliers per pair, the solver's errors)
 - what the data should do: tiles that only translate? a known rotation? one or several objectives?
 - a BigStitcher-Spark release install, 0.2.0 or later (`install-release` into `~/bigstitcher-spark`); its `screenshot`
@@ -78,7 +78,7 @@ Verdict: GOOD | USABLE, CHECK pairs ... | BAD because ...      Next: <one concre
 ## Scripts
 
 - `scripts/parse_logs.py LOG... [--pairs] [--json OUT]` -- stdlib; recognises detect / match (incl. EMBEDDINGS,
-  multi-consensus, ICP) / solver / pcmatch logs; sums the pairs, keeps the last error block, derives rotation,
+  multi-consensus, ICP) / solver logs; sums the pairs, keeps the last error block, derives rotation,
   scales and shear from the printed models. Numbers must use '.' as decimal separator (`JAVA_TOOL_OPTIONS=
   "-Duser.language=en -Duser.country=US"`).
 - `scripts/registration_report.py XML [--ref XML] [--setups 0-5] [--json OUT]` -- numpy; per-view transform

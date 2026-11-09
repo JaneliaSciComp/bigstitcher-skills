@@ -44,7 +44,7 @@ python3 SKILL_DIR/scripts/inspect_dataset.py /scratch/run_tune/dataset.xml --set
 ```
 Restrict every step to the views you align (`--setups` here, `-vi` / `--channelId` for the Java tools): the other
 channels of a tile overlap it 100 % and would swamp the pair list. `--intensity` needs a python with numpy and
-tensorstore (a pcmatch venv's `.venv/bin/python` has both; `PY=/path/python` for the scripts); without it the
+tensorstore (`PY=/path/python` points the scripts at a Python that has them); without it the
 percentiles are skipped and you read min / max off BigStitcher.
 `inspect_dataset.py` prints the views and the attributes that vary (tile, channel, angle, illumination), the
 GROUPS of views sharing voxel size and image size, the transform stack with a RESET proposal, existing labels
@@ -69,7 +69,7 @@ Decide with the user:
   does that yet.
 - **Manual rotation.** A group known to be rotated (another objective, a camera at 90 deg):
   `python3 SKILL_DIR/scripts/add_rotation.py XML --setups 6-11 --axis y --degrees 90 --in-place` before anything
-  else; afterwards `MATCHERS="geo fastrot"` only (no `emb`, no `pcm`).
+  else; afterwards `MATCHERS="geo fastrot"` only (no `emb`).
 - **Intensity range.** One `-i0 -i1` per group: `-i0` = the background level (p0.1 or the camera offset), `-i1`
   = p99.9 .. p99.99 of a bright view. The threshold is relative to `i1 - i0`: a too-high `-i1` (a hot pixel, the
   saturation value) lowers the effective threshold and floods the detection, a too-low one clips bright structure.
@@ -100,7 +100,7 @@ scale knob.
 
 ```bash
 export BSS I0=16 I1=255 DSXY=2 DSZ=1 VIEWS="-vi 0,0 -vi 0,1 -vi 0,2 -vi 0,3 -vi 0,4 -vi 0,5" FIXED=0,0
-export MATCHERS="geo emb pcm" RADIUS=100 PCMATCH=/path/.venv/bin/pcmatch
+export MATCHERS="geo emb" RADIUS=100
 export EXTRA_DOG="--anisotropy 2.55"            # DoG: 0.8 x the z/x voxel ratio (the GUI's suggestion); scale space defaults to the calibration
 bash SKILL_DIR/scripts/sweep.sh /scratch/run_tune/dataset.xml /scratch/run_tune_results/ds2-1
 ```
@@ -108,7 +108,7 @@ What it does, per level: `detect-interestpoints` with `--method DOG -s 1.8` and 
 --steps 4 --octaves -1`, both `--noiseFactor 2.5 --overlappingOnly --onlyCompareOverlapTiles`; a response
 ladder from that one detection (`filter-interestpoints --response` at 5x and 10x the noise floor, the base =
 2.5x), one filtered label per (factor, matcher) so correspondence lists never mix; the matchers
-`PRECISE_TRANSLATION` (geo), Java `EMBEDDINGS` after `embed-interestpoints` (emb), `pcmatch match` (pcm), all
+`PRECISE_TRANSLATION` (geo) and `EMBEDDINGS` after `embed-interestpoints` (emb), all
 with `-tm TRANSLATION -rm NONE -rme RME -rmni 12 -rmir 0 --clearCorrespondences`; four solver models with
 `--dryRun` (`TRANSLATION`, `RIGID` regularised with `TRANSLATION`, `AFFINE` with `RIGID`, `AFFINE` with
 `TRANSLATION`, lambda 0.1); one `runs.jsonl` row per (label, matcher, solver) and `report_<level>.md` ranked by
@@ -132,8 +132,7 @@ markdown report holds every row) and judge it (step 4). Typical adaptations:
 - rotation > 1 deg or scale / shear flags on a translation-close dataset -> too few or wrong links on that view;
   prefer the regularised models, check the view's pairs
 
-Persist the pick before the next level (the registration is written into the working copy's XML; a pcmatch label's
-staged correspondences are committed at that save):
+Persist the pick before the next level (the registration is written into the working copy's XML):
 ```bash
 bash SKILL_DIR/scripts/sweep.sh --save /scratch/run_tune/dataset.xml /scratch/run_tune_results/ds2-1 ss_ds2-1_nf2.5__emb rigid-tr
 ```

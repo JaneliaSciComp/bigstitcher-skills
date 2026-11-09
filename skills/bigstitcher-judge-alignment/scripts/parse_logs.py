@@ -14,7 +14,6 @@ Recognised logs (the kind is detected from the content):
            the EMBEDDINGS prefix (points with a vector, points within the radius)
   solver   solver: connected views, pairs with correspondences, the LAST Avg/Min/Max error block, removed links,
            disconnected groups, per-view transformation models (rotation, scaling, shear derived from the matrix)
-  pcmatch  pcmatch match: candidates -> inliers per pair
 
 Numbers are read with '.' as the decimal separator: run the Java tools with -Duser.language=en -Duser.country=US
 (JAVA_OPTS) if your locale prints commas.
@@ -56,9 +55,6 @@ RE_REMOVED_N = re.compile(r"Removed (\d+) inconsistent link\(s\) in (\d+) iterat
 RE_GROUPS = re.compile(r"Identified (\d+) \(dis\)connected groups")
 RE_GLOBOPT = re.compile(r"Global optimization of (\d+)(?: view-tiles \(Model=(\w+)\))?")
 RE_MODEL = re.compile(r"^tpId=(\d+) setupId=(\d+): \(([^)]*)\), \(([^)]*)\), \(([^)]*)\)(.*)$")
-RE_PCM_PAIR = re.compile(r"\((\d+), (\d+)\)<->\((\d+), (\d+)\): cand=(\d+) -> (?:(\d+) inliers|no model|no consensus set)")
-RE_PCM_TOTAL = re.compile(r"RANSAC: (\d+) correspondences over (\d+) pair\(s\)")
-RE_PCM_CAND = re.compile(r"(\d+) candidates over (\d+) pair\(s\)")
 RE_FIXED = re.compile(r"fixedViews: \[(.*?)\]")
 
 
@@ -106,8 +102,6 @@ def detect_kind(lines):
         return "match"
     if "Computed all interest points" in text or "noise floor of" in text or RE_VIEWPTS.search(text.replace("\r", "")):
         return "detect"
-    if "cand=" in text and "inliers" in text:
-        return "pcmatch"
     return "unknown"
 
 
@@ -343,27 +337,6 @@ def parse_solver(lines):
     return {"pairs": pairs, "connections": connect, "errors": errors, "models": models, "totals": tot}
 
 
-def parse_pcmatch(lines):
-    pairs, tot = {}, {}
-    for raw in lines:
-        m = RE_PCM_PAIR.search(raw)
-        if m:
-            inl = int(m.group(6)) if m.group(6) else 0
-            pairs[f"{m.group(1)},{m.group(2)}>{m.group(3)},{m.group(4)}"] = {"candidates": int(m.group(5)), "inliers": inl,
-                                                                           "status": "ok" if inl else "no_model"}
-        m = RE_PCM_TOTAL.search(raw)
-        if m:
-            tot["inliers_total"], tot["pairs_ok"] = int(m.group(1)), int(m.group(2))
-        m = RE_PCM_CAND.search(raw)
-        if m and "candidates_total" not in tot:
-            tot["candidates_total"], tot["pairs_with_candidates"] = int(m.group(1)), int(m.group(2))
-    inl = [p["inliers"] for p in pairs.values() if p["inliers"]]
-    tot.setdefault("inliers_total", sum(inl))
-    tot.update({"pairs_reported": len(pairs), "pairs_failed": sum(1 for p in pairs.values() if not p["inliers"]),
-                "failures": ["no_model"] if any(not p["inliers"] for p in pairs.values()) else [],
-                "inliers_min": min(inl) if inl else 0, "inliers_median": statistics.median(inl) if inl else 0, "inliers_max": max(inl) if inl else 0})
-    return {"pairs": pairs, "totals": tot}
-
 
 def parse_log(path):
     with open(path, errors="replace") as f:
@@ -376,10 +349,8 @@ def parse_log(path):
         out.update(parse_match(lines))
     elif kind == "solver":
         out.update(parse_solver(lines))
-    elif kind == "pcmatch":
-        out.update(parse_pcmatch(lines))
     out["exceptions"] = sum(1 for ln in lines if "Exception" in ln and "SLF4J" not in ln)
-    out["done"] = any(ln.strip().startswith("Done") for ln in lines[-30:]) or (kind == "pcmatch" and "RANSAC:" in "\n".join(lines[-40:]))
+    out["done"] = any(ln.strip().startswith("Done") for ln in lines[-30:])
     return out
 
 
@@ -404,7 +375,7 @@ def summarize(r, show_pairs=False):
         if show_pairs:
             for k, v in sorted(r["views"].items(), key=lambda kv: tuple(int(x) for x in kv[0].split(","))):
                 print(f"     view {k:>8}: {v:>9,}" + (f"   floor {r['noise_floor'][k]:.3g}" if k in r.get("noise_floor", {}) else ""))
-    elif r["kind"] in ("match", "pcmatch"):
+    elif r["kind"] == "match":
         line = (f"   inliers: {t['inliers_total']:,} total over {t.get('pairs_ok', t.get('pairs_reported', 0))} pairs with a model"
                 + (f" (min {t['inliers_min']:,} / median {t['inliers_median']:,.0f} / max {t['inliers_max']:,})" if t.get("inliers_max") else "")
                 + f"; candidates {t.get('candidates_total', 0):,}; failed pairs {t.get('pairs_failed', 0)}"

@@ -35,8 +35,8 @@ each), `--sigma`, `--intensity` with the same grammar, `--keepPoints N --keepBy 
 --keepMode highest|median|lowest`, `--newLabel NAME` (one filter only), `--copy` stores a PLAIN label (a copy
 of the points) instead of a filtered label that follows its base. Detect once at the noise floor, then filter at
 2x, 4x, 8x the floor: the registration decides which threshold is right (dense tissue wants ~16-20x the floor,
-sparse beads the floor itself). The sweep script gives every (factor, matcher) its own FILTERED label (not a copy: a copy loses
-the detector parameters pcmatch needs, and filtered labels share their base's embedding) so matchers never share correspondence lists.
+sparse beads the floor itself). The sweep script gives every (factor, matcher) its own FILTERED label (filtered labels share their base's
+embedding; a copy would need its own) so matchers never share correspondence lists.
 
 ## match-interestpoints
 

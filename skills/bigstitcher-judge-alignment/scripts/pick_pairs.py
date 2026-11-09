@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Which view pairs to look at. From a match log (match-interestpoints or pcmatch) and optionally the solver log and the
+"""Which view pairs to look at. From a match log (match-interestpoints) and optionally the solver log and the
 registration report, name the pairs the numbers flag -- failed pairs, the fewest inliers, the largest error, the largest
 change against the start -- plus one good pair as a reference, as the `--pairs 'A,B;C,D'` argument of BigStitcher-Spark
 `screenshot` (render_pairs.sh).
@@ -50,7 +50,7 @@ def main():
     pairs = {}
     for path in a.match_logs:
         r = parse_log(path)
-        if r["kind"] not in ("match", "pcmatch"):
+        if r["kind"] != "match":
             sys.exit(f"{path} is a {r['kind']} log, not a match log")
         for key, p in r["pairs"].items():
             (ta, sa), (tb, sb) = ids(key)

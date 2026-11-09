@@ -4,7 +4,7 @@
 #
 #   ladder.sh XML OUTBASE "8,8 4,4 2,2"             levels as DSXY,DSZ pairs, coarse first (inspect_dataset.py proposes them)
 #
-# Takes the same environment as sweep.sh (BSS, I0, I1, VIEWS, MATCHERS, RADIUS, MODEL_ONNX, PCMATCH, ...). RADIUS given here is
+# Takes the same environment as sweep.sh (BSS, I0, I1, VIEWS, MATCHERS, RADIUS, MODEL_ONNX, ...). RADIUS given here is
 # the FIRST level's search radius (the metadata uncertainty); later levels use max(RADIUS_MIN=20, 3 x the saved solve's max error).
 # RME is recomputed per level unless you export it. PREFER_SOLVERS (ordered, default tr,rigid-tr,affine-rigid,affine-tr): the simplest
 # solver whose avg error is within ERR_SLACK (default 0.05) of the best unflagged one is chosen. LADDER_STRICT=1 stops when the

@@ -9,7 +9,7 @@ translation-invariant but NOT rotation-invariant: views rotated against each oth
 (unknown manual rotation, another objective mounted at an angle) must go to the geometric matcher (`-m
 FAST_ROTATION`) -- do not work around this, a rotation-tolerant model is a separate project.
 
-## Driver A: all Java (BigStitcher-Spark release 0.2.0 or later)
+## The commands (BigStitcher-Spark release 0.2.0 or later)
 
 ```
 embed-interestpoints -x XML -l LABEL --model hf://JaneliaSciComp/bigstitcher-embedding-translation-stack64 [view selection] --localSparkBindAddress
@@ -20,8 +20,8 @@ match-interestpoints -x XML -l LABEL [view selection] -m EMBEDDINGS -sr RADIUS -
   default `MODEL_ONNX`). The driver pins the hub revision, downloads the `.onnx` and its `.onnx.json` sidecar once
   into `~/.bigstitcher/models` (`--modelCache DIR` moves the cache) and records the pinned URI with the stored
   vectors. The maintainers replace the hub model when a better one is released, so the skill never has to change.
-  A local file (`--model /path/model.onnx`, sidecar next to it) is only for a user who asks for a specific model,
-  e.g. the mirror-tolerant `_mirror-xy` or the rotation-invariant `rotinv` variants from a pcmatch checkout.
+  More models (mirror-tolerant, rotation-invariant) will appear on the hub under the same namespace; a local file
+  (`--model /path/model.onnx` with its `.onnx.json` next to it) is only for a user who asks for one.
 - Embedding runs once per label (the vectors are stored with the points); a filtered label is embedded through
   its base, a plain copy is its own base. Re-matching with other RANSAC settings needs no re-embedding.
 - `-sr` is REQUIRED: the registration's uncertainty in global px. 20 for a dataset whose metadata is already good
@@ -31,40 +31,15 @@ match-interestpoints -x XML -l LABEL [view selection] -m EMBEDDINGS -sr RADIUS -
   leave both alone while comparing other settings; they trade a few percent either way.
 - No `-n / -r / -s` and no view grouping with EMBEDDINGS.
 
-## Driver B: pcmatch (Python, GPU)
-
-```
-pcmatch match -x XML -l LABEL -vi 0,0 -vi 0,1 ... --radius RADIUS --ratio 0.85 -tm translation -rme E -rmni 12 -rmir 0 \
-    [--model /path/model.pt] --write-correspondences --no-candidates --device cuda
-```
-- Same algorithm, same defaults (`--radius` = `-sr`, `--ratio` = `--descriptorRatio`); embeds live on the GPU (or
-  uses stored vectors with `--embeddings stored|auto`), writes the correspondences as a STAGING file next to the
-  store; the next XML save by a Java tool (the solver) commits it. Consequence: run the solver for that label
-  right after the pcmatch match, before another Java command writes the same label.
-- pcmatch also has the judges with ground truth (`pcmatch eval registration`) and `pcmatch inspect`.
-- Needs the pcmatch checkout's venv (`.venv/bin/pcmatch`); set `PCMATCH=/path/.venv/bin/pcmatch` for the sweep.
-
-## The two drivers are not bit-identical (observed 2026-11-08)
-
-- pcmatch finds 5-20 % more inliers than `-m EMBEDDINGS` on the same points and radius (ds1-stitch full resolution:
-  14,576 vs 12,363; mouse head coarse levels within 3 %); the solves agree to 0.01 px. Treat the gap as a property
-  of the drivers, not of the settings.
-- pcmatch's minimum-inlier rule is applied before its final consistency filter, so a pair can be kept with
-  `rmni - 1` inliers where the Java matcher rejects it; at a coarse level this can decide whether a weak pair
-  connects a view. Read `pairs ok / failed` with that in mind.
-- pcmatch uses the vectors stored by `embed-interestpoints` when the label has them (`--embeddings auto`), and
-  embeds live on the GPU otherwise; the order of the matchers in a sweep therefore changes what it reads, not
-  the result.
-
 ## When to use which
 
 | situation | arm |
 |---|---|
-| tiles of one acquisition, translation-close, any sample | geo AND emb (or pcm) -- compare; emb usually wins on sparse / textured samples, geo on dense bead fields |
+| tiles of one acquisition, translation-close, any sample | geo AND emb -- compare; emb usually wins on sparse / textured samples, geo on dense bead fields |
 | unknown rotation between view groups | geo only: `-m FAST_ROTATION`, then PRECISE_TRANSLATION on the next level |
 | mirrored camera (left/right flipped) | emb with the local `_mirror-xy` model (user-supplied file), or geo (geometric descriptors do not care about mirroring) |
 | multi-view (90 deg angles) | out of scope here; the rotation-invariant model exists but tiles are not its regime |
-| no model file, no pcmatch | geo only; say so in the report |
+| no access to the hub and no local model file | geo only; say so in the report |
 
 ## Failure modes
 

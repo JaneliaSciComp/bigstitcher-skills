@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # sweep.sh -- ONE level of the coarse-to-fine alignment grid on a BigStitcher WORKING COPY (never the original project):
 #   detect (DoG / scale-space at the noise floor) -> filter (response ladder, one plain label per matcher)
-#   -> match (geometric descriptors / Java EMBEDDINGS / pcmatch) -> solver --dryRun per model -> runs.jsonl + report
+#   -> match (geometric descriptors / learned EMBEDDINGS) -> solver --dryRun per model -> runs.jsonl + report
 #
 #   sweep.sh XML OUTDIR                              run the grid of this level
 #   sweep.sh --save XML OUTDIR LABEL SOLVER          run the chosen solver for real: the registration is written into XML
@@ -15,15 +15,14 @@
 #                         EXTRA_DOG="" (e.g. --anisotropy 2.55 = 0.8 x the z/x voxel ratio, the GUI's suggestion)   EXTRA_SS="" (default anisotropy = calibration)
 #                         FLOOR=highest|median  how the per-view noise floors are pooled for the threshold: the tool's rule (highest view) or a
 #                                               --dryRun probe + -t = NF x the MEDIAN floor (dim tiles next to a bright one; labels get the suffix m)
-#                         MATCHERS="geo emb"   (geo = PRECISE_TRANSLATION, fastrot = FAST_ROTATION, emb = Java EMBEDDINGS, pcm = pcmatch)
+#                         MATCHERS="geo emb"   (geo = PRECISE_TRANSLATION, fastrot = FAST_ROTATION, emb = EMBEDDINGS with the learned descriptor)
 #                         RME (default max(2, 2.5*DSXY) global px)   RMNI=12   RMIR=0   SR="" (geo search radius; empty = unlimited)
-#                         RADIUS=100  (emb / pcm search radius = the registration's uncertainty in global px)   RATIO=0.85   MINSIM=0.3
+#                         RADIUS=100  (emb search radius = the registration's uncertainty in global px)   RATIO=0.85   MINSIM=0.3
 #                         MODEL_ONNX=hf://JaneliaSciComp/bigstitcher-embedding-translation-stack64 (emb; default = the Hugging Face hub model,
 #                                    downloaded once into ~/.bigstitcher/models; a local .onnx with its .onnx.json next to it also works)
-#                         PCMATCH=/path/to/pcmatch   DEVICE=cuda
 #                         SOLVERS="tr rigid-tr affine-rigid affine-tr"   FIXED="" (e.g. 0,0; empty = the solver's default, the first view)
 #                         VIEWS="" (Java view selection, e.g. "-vi 0,34 -vi 0,35" or "--channelId 2 --tileId 2,3,6,7")
-#                         PCM_VIEWS="" (pcmatch view selection; default = the -vi entries of VIEWS)   SPARK="--localSparkBindAddress"
+#                         SPARK="--localSparkBindAddress"
 # Every command line and its log land in OUTDIR; a finished (label, matcher, solver) is skipped on re-runs.
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -41,7 +40,6 @@ XML=$(readlink -f "${1:?XML}"); OUT=$(readlink -f "${2:?OUTDIR}"); mkdir -p "$OU
 : "${BSS:?BSS (launcher directory) is required}"
 SPARK=${SPARK-"--localSparkBindAddress"}
 VIEWS=${VIEWS:-}
-PCM_VIEWS=${PCM_VIEWS:-$(echo "$VIEWS" | tr ' ' '\n' | grep -A1 -x -- '-vi' | tr '\n' ' ' | sed 's/--//g')}
 SOLVERS=${SOLVERS:-"tr rigid-tr affine-rigid affine-tr"}
 FIXED=${FIXED:-}
 MODEL_ONNX=${MODEL_ONNX:-hf://JaneliaSciComp/bigstitcher-embedding-translation-stack64}
@@ -66,7 +64,7 @@ if [ $MODE = save ]; then
   cp "$XML" "$OUT/solved_${LAB}_$S.xml"
   $PY "$PARSE" "$OUT/save_${LAB}_$S.log" | tee -a "$OUT/sweep.log"
   REP=$HERE/../../bigstitcher-judge-alignment/scripts/registration_report.py
-  PYNP=$PY; $PYNP -c 'import numpy' 2>/dev/null || { [ -n "${PCMATCH:-}" ] && [ -x "$(dirname "$PCMATCH")/python" ] && PYNP=$(dirname "$PCMATCH")/python; }
+  PYNP=$PY
   if [ -f "$REP" ] && $PYNP -c 'import numpy' 2>/dev/null; then
     SETUPS=$(echo "$VIEWS" | tr ' ' '\n' | grep -A1 -x -- '-vi' | grep -v -- '-vi\|--' | cut -d, -f2 | paste -sd, -)
     $PYNP "$REP" "$XML" ${SETUPS:+--setups "$SETUPS"} ${XML_ORIG:+--ref "$XML_ORIG"} $( [ -f "$XML.orig" ] && [ -z "${XML_ORIG:-}" ] && echo --ref "$XML.orig") | tee "$OUT/registration_after_${LAB}_$S.txt"
@@ -80,7 +78,7 @@ LEVEL="ds${DSXY}-${DSZ}"
 DETECTORS=${DETECTORS:-"dog ss"}; NF=${NF:-2.5}; SIGMA_DOG=${SIGMA_DOG:-1.8}; SIGMA_SS=${SIGMA_SS:-1.6}; TYPE=${TYPE:-MAX}
 FACTORS=${FACTORS:-"2.5 5 10"}; OVERLAP=${OVERLAP-"--overlappingOnly --onlyCompareOverlapTiles"}; EXTRA_DETECT=${EXTRA_DETECT:-}
 MATCHERS=${MATCHERS:-"geo emb"}; RME=${RME:-$(awk "BEGIN{r=2.5*$DSXY; print (r<2)?2:r}")}; RMNI=${RMNI:-12}; RMIR=${RMIR:-0}; SR=${SR:-}
-RADIUS=${RADIUS:-100}; RATIO=${RATIO:-0.85}; MINSIM=${MINSIM:-0.3}; DEVICE=${DEVICE:-cuda}
+RADIUS=${RADIUS:-100}; RATIO=${RATIO:-0.85}; MINSIM=${MINSIM:-0.3}
 log "=== level $LEVEL on $XML -> $OUT | detectors [$DETECTORS] nf $NF type $TYPE factors [$FACTORS] | matchers [$MATCHERS] rme $RME rmni $RMNI radius $RADIUS sr '${SR}' | solvers [$SOLVERS] | views '${VIEWS}'"
 
 detect() { # detector -> LABEL_BASE NOISE_FLOOR
@@ -130,7 +128,7 @@ make_label() { # base factor matcher -> echoes the FILTERED label of this (facto
   echo "$tag"
 }
 match() { local lab=$1 m=$2 base=${3:-$1}
-  if [ -s "$OUT/match_$lab.log" ] && grep -q -E 'Done|RANSAC: [0-9]+ correspondences' "$OUT/match_$lab.log"; then log "match $lab exists, skipped"; return 0; fi
+  if [ -s "$OUT/match_$lab.log" ] && grep -q 'Done' "$OUT/match_$lab.log"; then log "match $lab exists, skipped"; return 0; fi
   case $m in
     geo) run "match_$lab" "$BSS/match-interestpoints" -x "$XML" -l "$lab" $VIEWS -m PRECISE_TRANSLATION -tm TRANSLATION -rm NONE \
             -rme "$RME" -rmni "$RMNI" -rmir "$RMIR" ${SR:+-sr $SR} --clearCorrespondences $SPARK;;
@@ -141,10 +139,7 @@ match() { local lab=$1 m=$2 base=${3:-$1}
          fi
          run "match_$lab" "$BSS/match-interestpoints" -x "$XML" -l "$lab" $VIEWS -m EMBEDDINGS -sr "$RADIUS" --descriptorRatio "$RATIO" --minSimilarity "$MINSIM" \
             -tm TRANSLATION -rm NONE -rme "$RME" -rmni "$RMNI" -rmir "$RMIR" --clearCorrespondences $SPARK;;
-    pcm) [ -n "${PCMATCH:-}" ] || { log "matcher pcm needs PCMATCH (path to the pcmatch executable)"; return 1; }
-         run "match_$lab" "$PCMATCH" match -x "$XML" -l "$lab" $PCM_VIEWS --radius "$RADIUS" --ratio "$RATIO" -tm translation -rme "$RME" -rmni "$RMNI" -rmir "$RMIR" \
-            ${PCM_MODEL:+--model "$PCM_MODEL"} --write-correspondences --no-candidates --device "$DEVICE";;
-    *) log "unknown matcher '$m' (geo | fastrot | emb | pcm)"; return 1;;
+    *) log "unknown matcher '$m' (geo | fastrot | emb)"; return 1;;
   esac
 }
 solve_dry() { local lab=$1 s=$2 flags; flags=$(solve_flags "$s") || return 1
