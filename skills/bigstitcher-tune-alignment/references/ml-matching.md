@@ -9,19 +9,19 @@ translation-invariant but NOT rotation-invariant: views rotated against each oth
 (unknown manual rotation, another objective mounted at an angle) must go to the geometric matcher (`-m
 FAST_ROTATION`) -- do not work around this, a rotation-tolerant model is a separate project.
 
-## Driver A: all Java (BigStitcher-Spark >= 0.1.3-SNAPSHOT of 2026-10-30)
+## Driver A: all Java (BigStitcher-Spark release 0.2.0 or later)
 
 ```
-embed-interestpoints -x XML -l LABEL --model /path/model.onnx [view selection] --localSparkBindAddress
+embed-interestpoints -x XML -l LABEL --model hf://JaneliaSciComp/bigstitcher-embedding-translation-stack64 [view selection] --localSparkBindAddress
 match-interestpoints -x XML -l LABEL [view selection] -m EMBEDDINGS -sr RADIUS --descriptorRatio 0.85 --minSimilarity 0.3 \
     -tm TRANSLATION -rm NONE -rme E -rmni 12 -rmir 0 --clearCorrespondences --localSparkBindAddress
 ```
-- The `.onnx.json` sidecar must sit next to the `.onnx` (it carries the patch extents, normalisation and the model
-  fingerprint). Models: `models/translation-stack_..._mv911_..._neg3r500.onnx` in a pcmatch checkout (the default
-  translation model), the `..._mirror-xy.onnx` variant for cameras that mirror the image along x or y, the
-  `rotinv-..._ft-allmv.onnx` rotation + mirror invariant model (weaker on tiles; out of scope here). On the Hugging
-  Face hub: `JaneliaSciComp/bigstitcher-embedding-translation-stack64` (jars built after 2026-10-31 accept
-  `--model hf://JaneliaSciComp/bigstitcher-embedding-translation-stack64`; older ones need the downloaded files).
+- The model is ALWAYS the Hugging Face hub model `hf://JaneliaSciComp/bigstitcher-embedding-translation-stack64` (the sweep's
+  default `MODEL_ONNX`). The driver pins the hub revision, downloads the `.onnx` and its `.onnx.json` sidecar once
+  into `~/.bigstitcher/models` (`--modelCache DIR` moves the cache) and records the pinned URI with the stored
+  vectors. The maintainers replace the hub model when a better one is released, so the skill never has to change.
+  A local file (`--model /path/model.onnx`, sidecar next to it) is only for a user who asks for a specific model,
+  e.g. the mirror-tolerant `_mirror-xy` or the rotation-invariant `rotinv` variants from a pcmatch checkout.
 - Embedding runs once per label (the vectors are stored with the points); a filtered label is embedded through
   its base, a plain copy is its own base. Re-matching with other RANSAC settings needs no re-embedding.
 - `-sr` is REQUIRED: the registration's uncertainty in global px. 20 for a dataset whose metadata is already good
@@ -62,7 +62,7 @@ pcmatch match -x XML -l LABEL -vi 0,0 -vi 0,1 ... --radius RADIUS --ratio 0.85 -
 |---|---|
 | tiles of one acquisition, translation-close, any sample | geo AND emb (or pcm) -- compare; emb usually wins on sparse / textured samples, geo on dense bead fields |
 | unknown rotation between view groups | geo only: `-m FAST_ROTATION`, then PRECISE_TRANSLATION on the next level |
-| mirrored camera (left/right flipped) | emb with the `_mirror-xy` model, or geo (geometric descriptors do not care about mirroring) |
+| mirrored camera (left/right flipped) | emb with the local `_mirror-xy` model (user-supplied file), or geo (geometric descriptors do not care about mirroring) |
 | multi-view (90 deg angles) | out of scope here; the rotation-invariant model exists but tiles are not its regime |
 | no model file, no pcmatch | geo only; say so in the report |
 

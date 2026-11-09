@@ -18,7 +18,9 @@
 #                         MATCHERS="geo emb"   (geo = PRECISE_TRANSLATION, fastrot = FAST_ROTATION, emb = Java EMBEDDINGS, pcm = pcmatch)
 #                         RME (default max(2, 2.5*DSXY) global px)   RMNI=12   RMIR=0   SR="" (geo search radius; empty = unlimited)
 #                         RADIUS=100  (emb / pcm search radius = the registration's uncertainty in global px)   RATIO=0.85   MINSIM=0.3
-#                         MODEL_ONNX=/path/model.onnx (emb; the .onnx.json sidecar next to it)   PCMATCH=/path/to/pcmatch   DEVICE=cuda
+#                         MODEL_ONNX=hf://JaneliaSciComp/bigstitcher-embedding-translation-stack64 (emb; default = the Hugging Face hub model,
+#                                    downloaded once into ~/.bigstitcher/models; a local .onnx with its .onnx.json next to it also works)
+#                         PCMATCH=/path/to/pcmatch   DEVICE=cuda
 #                         SOLVERS="tr rigid-tr affine-rigid affine-tr"   FIXED="" (e.g. 0,0; empty = the solver's default, the first view)
 #                         VIEWS="" (Java view selection, e.g. "-vi 0,34 -vi 0,35" or "--channelId 2 --tileId 2,3,6,7")
 #                         PCM_VIEWS="" (pcmatch view selection; default = the -vi entries of VIEWS)   SPARK="--localSparkBindAddress"
@@ -42,6 +44,7 @@ VIEWS=${VIEWS:-}
 PCM_VIEWS=${PCM_VIEWS:-$(echo "$VIEWS" | tr ' ' '\n' | grep -A1 -x -- '-vi' | tr '\n' ' ' | sed 's/--//g')}
 SOLVERS=${SOLVERS:-"tr rigid-tr affine-rigid affine-tr"}
 FIXED=${FIXED:-}
+MODEL_ONNX=${MODEL_ONNX:-hf://JaneliaSciComp/bigstitcher-embedding-translation-stack64}
 SECS=0
 
 log() { echo "[$(date +%T)] $*" | tee -a "$OUT/sweep.log" >&2; }
@@ -133,8 +136,7 @@ match() { local lab=$1 m=$2 base=${3:-$1}
             -rme "$RME" -rmni "$RMNI" -rmir "$RMIR" ${SR:+-sr $SR} --clearCorrespondences $SPARK;;
     fastrot) run "match_$lab" "$BSS/match-interestpoints" -x "$XML" -l "$lab" $VIEWS -m FAST_ROTATION -tm TRANSLATION -rm NONE \
             -rme "$RME" -rmni "$RMNI" -rmir "$RMIR" --clearCorrespondences $SPARK;;
-    emb) [ -n "${MODEL_ONNX:-}" ] || { log "matcher emb needs MODEL_ONNX"; return 1; }
-         if [ ! -f "$OUT/embed_$base.done" ]; then      # one embedding per BASE label serves every filtered label of it
+    emb) if [ ! -f "$OUT/embed_$base.done" ]; then      # one embedding per BASE label serves every filtered label of it
            run "embed_$base" "$BSS/embed-interestpoints" -x "$XML" -l "$base" $VIEWS --model "$MODEL_ONNX" $SPARK && touch "$OUT/embed_$base.done" || return 1
          fi
          run "match_$lab" "$BSS/match-interestpoints" -x "$XML" -l "$lab" $VIEWS -m EMBEDDINGS -sr "$RADIUS" --descriptorRatio "$RATIO" --minSimilarity "$MINSIM" \

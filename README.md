@@ -6,7 +6,9 @@ Claude Code skills for working with [BigStitcher](https://github.com/JaneliaSciC
 
 A skill is a `SKILL.md` instruction file plus optional scripts and reference docs. Claude Code keeps
 every skill's name and description in context and loads the rest when a task matches. These skills
-drive the installed CLI tools; they do not need the Java source trees.
+drive the installed CLI tools; they do not need the Java source trees. They need a BigStitcher-Spark
+**release 0.2.0 or later** (`install-release`, see `skills/bigstitcher-xml/references/install-bigstitcher-spark.md`);
+the learned-descriptor step uses the Hugging Face hub model `hf://JaneliaSciComp/bigstitcher-embedding-translation-stack64`.
 
 ## Skills
 

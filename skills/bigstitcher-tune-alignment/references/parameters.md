@@ -1,6 +1,6 @@
 # BigStitcher-Spark parameters for the alignment grid search
 
-Flags as of BigStitcher-Spark 0.1.3-SNAPSHOT (October 2026). They move between releases: run `<command> --help`
+Flags as of BigStitcher-Spark 0.2.0 (November 2026; the first release with `SCALE_SPACE`, `embed-interestpoints` and `screenshot`). They move between releases: run `<command> --help`
 before building a command line, and prefer the long names in scripts. All commands take `-x <absolute path or URI>`
 (a relative path fails with "Relative path in absolute URI"), the view selection `-vi 'tp,setup'` (repeatable) or
 `--tileId / --channelId / --angleId / --illuminationId / --timepointId` (comma lists, ranges `0-5`), `--dryRun`, and
@@ -65,12 +65,11 @@ a <-> b within R px:`. There is no final total: parse_logs.py sums the pairs.
 
 ## embed-interestpoints (the learned descriptor, Java driver)
 
-`-x XML -l LABEL --model /path/model.onnx [--arrayName embedding] [--blockSize 128] [view selection]`. The
-`.onnx.json` sidecar must sit next to the `.onnx`. A filtered label is embedded through its base label; a plain
+`-x XML -l LABEL --model hf://JaneliaSciComp/bigstitcher-embedding-translation-stack64 [--arrayName embedding] [--blockSize 128] [view selection]`.
+The hub model is the rule (a local `.onnx` needs its `.onnx.json` sidecar next to it). A filtered label is embedded through its base label; a plain
 copy (`filter-interestpoints --copy`) is its own base. The vectors are stored with the points
 (`interestpoints.zarr/<label>/tp<T>/arrays/embedding/setup<S>`), so matching can be repeated without re-embedding.
-Models: `models/*.onnx` in pcmatch, or the Hugging Face hub (`JaneliaSciComp/bigstitcher-embedding-translation-stack64`;
-`--model hf://...` only in jars built after 2026-10-31). See `ml-matching.md`.
+Hub models are downloaded once into `~/.bigstitcher/models` (`--modelCache DIR` moves the cache). See `ml-matching.md`.
 
 ## solver
 

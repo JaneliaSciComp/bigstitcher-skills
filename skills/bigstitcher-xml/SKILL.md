@@ -53,7 +53,7 @@ bash <skill dir>/scripts/find_bigstitcher_spark.sh    # prints the directory hol
 ```
 
 - Exit 0: run the executables from the printed directory or put it on `PATH`. Run each command with `--help`
-  before proposing flags. The CLI evolves; the flags in the reference files match release 0.1.1 (September 2026).
+  before proposing flags. The CLI evolves; the flags in the reference files were checked against release 0.2.0 (November 2026).
 - Exit 3: a downloaded `BigStitcher-Spark-<v>-local.jar` but no executables. Run commands as
   `java -Xmx<G>g -jar <jar> <command> …`, or offer to create the executables with `install-release`.
 - Exit 1 or 2: nothing installed. Read `references/install-bigstitcher-spark.md`. The normal path is

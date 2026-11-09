@@ -43,7 +43,7 @@ find_shot() {
 SHOT=$(find_shot)
 if [ -z "$SHOT" ] || [ ! -x "$SHOT" ]; then
   echo "no 'screenshot' launcher found (BigStitcher-Spark 0.1.4+). Set SCREENSHOT=/path/to/screenshot, or install a release:" >&2
-  echo "  curl -fsSLO https://raw.githubusercontent.com/JaneliaSciComp/BigStitcher-Spark/main/install-release && bash install-release -d ~/bigstitcher-spark-release -t 16 -m 64" >&2
+  echo "  curl -fsSLO https://raw.githubusercontent.com/JaneliaSciComp/BigStitcher-Spark/main/install-release && bash install-release -d ~/bigstitcher-spark -t <threads> -m <GB>   (0.2.0 or later)" >&2
   echo "Without pictures: name the pairs to look at in BigDataViewer (quality-metrics.md section 3)." >&2
   exit 3
 fi

@@ -39,6 +39,9 @@ report_java() {
 for d in "${candidates[@]}"; do
     if [ -d "$d" ] && is_install_dir "$d"; then
         echo "$d"
+        if is_clone_dir "$d"; then
+            echo "note: $d is a source clone with locally built executables (a SNAPSHOT, not a release). For reproducible runs install a release into ~/bigstitcher-spark (references/install-bigstitcher-spark.md); it is found first." >&2
+        fi
         report_java
         exit 0
     fi

@@ -9,8 +9,9 @@ Registration in BigStitcher is detect -> match -> solve, and the three stages hi
 solver error of 2 px can come from a perfect alignment of too few points or from a wrong link on one pair. This
 skill makes the search systematic: a small grid at a coarse resolution, the winner carried to the next finer
 level, every run recorded, and a verdict from the numbers (the `bigstitcher-judge-alignment` skill). It drives the
-installed BigStitcher-Spark commands only; no Java source is needed. Pictures of the data come from
-BigStitcher-Spark's `screenshot` (0.1.4+): `ladder.sh` renders the overlapping pairs of every saved level into
+installed BigStitcher-Spark commands only (a release install, 0.2.0 or later; no Java source is needed), and the
+learned descriptor always comes from the Hugging Face hub model. Pictures of the data come from
+BigStitcher-Spark's `screenshot`: `ladder.sh` renders the overlapping pairs of every saved level into
 `shots_<label>_<solver>/` (magenta / green, xy + xz) through the judge skill's `render_pairs.sh`, and the judge skill
 says how to read them. Without a `screenshot` launcher the ladder notes it and the numbers have to do.
 
@@ -99,7 +100,7 @@ scale knob.
 
 ```bash
 export BSS I0=16 I1=255 DSXY=2 DSZ=1 VIEWS="-vi 0,0 -vi 0,1 -vi 0,2 -vi 0,3 -vi 0,4 -vi 0,5" FIXED=0,0
-export MATCHERS="geo emb pcm" RADIUS=100 MODEL_ONNX=/path/translation-stack_...neg3r500.onnx PCMATCH=/path/.venv/bin/pcmatch
+export MATCHERS="geo emb pcm" RADIUS=100 PCMATCH=/path/.venv/bin/pcmatch
 export EXTRA_DOG="--anisotropy 2.55"            # DoG: 0.8 x the z/x voxel ratio (the GUI's suggestion); scale space defaults to the calibration
 bash SKILL_DIR/scripts/sweep.sh /scratch/run_tune/dataset.xml /scratch/run_tune_results/ds2-1
 ```

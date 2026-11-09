@@ -18,7 +18,8 @@ template -- read it the first time.
 - the logs: `detect-interestpoints`, `match-interestpoints` (or `pcmatch match`), `solver` -- or, when the run
   was in the GUI, the numbers the user can read off (points per view, inliers per pair, the solver's errors)
 - what the data should do: tiles that only translate? a known rotation? one or several objectives?
-- a BigStitcher-Spark install with `screenshot` (0.1.4+) for the pictures; `render_pairs.sh` finds it (`SCREENSHOT=`,
+- a BigStitcher-Spark release install, 0.2.0 or later (`install-release` into `~/bigstitcher-spark`); its `screenshot`
+  makes the pictures and `render_pairs.sh` finds it (`SCREENSHOT=`,
   `BSS=`, the xml skill's finder, `~/bigstitcher-spark*/`) and exits 3 when there is none
 
 Without the logs the XML alone still gives the transform plausibility and the overlap geometry; say which parts
